@@ -18,6 +18,8 @@
 		<java.version>25</java.version>
 		<shedlock.version>7.8.0</shedlock.version>
 		<springdoc.version>3.1.0</springdoc.version>
+		<bucket4j.version>8.10.1</bucket4j.version>
+		<bucket4j.version>8.10.1</bucket4j.version>
 		<testcontainers.version>1.21.3</testcontainers.version>
 		<!-- Docker Engine 29 dropped API <1.44; docker-java defaults to 1.32 and
 		     Testcontainers pins it there unless api.version is set explicitly -->
@@ -104,6 +106,19 @@
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 			<version>${springdoc.version}</version>
+		</dependency>
+
+		<!-- Distributed rate limiting (spec §15, Milestone 4.3): Bucket4j + Redis
+		     via the Lettuce backend (reuses Spring's Redis connection). -->
+		<dependency>
+			<groupId>com.bucket4j</groupId>
+			<artifactId>bucket4j-core</artifactId>
+			<version>${bucket4j.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.bucket4j</groupId>
+			<artifactId>bucket4j-redis</artifactId>
+			<version>${bucket4j.version}</version>
 		</dependency>
 
 		<dependency>
