@@ -1,3 +1,9 @@
+export interface TunnelUsage {
+  tunnelId: string;
+  bytesIn: number;
+  bytesOut: number;
+}
+
 export interface TunnelInfo {
   id: string;
   name: string;

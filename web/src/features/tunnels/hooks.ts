@@ -7,6 +7,14 @@ export function useTunnels() {
   return useQuery({ queryKey: tunnelKeys.all, queryFn: tunnelsApi.list });
 }
 
+export function useTunnelUsage(id: string | null) {
+  return useQuery({
+    queryKey: ["tunnels", id, "usage"],
+    queryFn: () => tunnelsApi.usage(id!),
+    enabled: id !== null,
+  });
+}
+
 function invalidate(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: tunnelKeys.all });
 }

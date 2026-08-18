@@ -2,7 +2,24 @@ import { useState } from "react";
 import { Button, Card, CardTitle, Input, Select, StatusBadge, Table, Td, EmptyRow } from "../../../components/ui";
 import { useAgents } from "../../agents/hooks";
 import { usePorts } from "../../ports/hooks";
-import { useTunnels, useCreateTunnel, useStartTunnel, useStopTunnel, useDeleteTunnel } from "../hooks";
+import { useTunnels, useCreateTunnel, useStartTunnel, useStopTunnel, useDeleteTunnel, useTunnelUsage } from "../hooks";
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function UsageCell({ tunnelId }: { tunnelId: string }) {
+  const usage = useTunnelUsage(tunnelId);
+  if (!usage.data) return <span className="text-ink-dim">-</span>;
+  return (
+    <span className="font-mono text-xs">
+      ↓{formatBytes(usage.data.bytesIn)} ↑{formatBytes(usage.data.bytesOut)}
+    </span>
+  );
+}
 
 export function TunnelsPanel() {
   const tunnels = useTunnels();
@@ -57,12 +74,13 @@ export function TunnelsPanel() {
         </Button>
       </div>
       {error && <p className="mb-2 text-sm text-bad">{error}</p>}
-      <Table headers={["Name", "Target", "Status", ""]}>
-        {(tunnels.data ?? []).length === 0 && <EmptyRow cols={4} message="No tunnels yet" />}
+      <Table headers={["Name", "Target", "Usage", "Status", ""]}>
+        {(tunnels.data ?? []).length === 0 && <EmptyRow cols={5} message="No tunnels yet" />}
         {(tunnels.data ?? []).map((t) => (
           <tr key={t.id}>
             <Td>{t.name}</Td>
             <Td mono>{t.targetHost}:{t.targetPort}</Td>
+            <Td><UsageCell tunnelId={t.id} /></Td>
             <Td><StatusBadge status={t.status} /></Td>
             <Td>
               <span className="flex gap-1">
