@@ -398,4 +398,26 @@ class BusinessLoopIntegrationTest {
     assert json.readTree(np.getResponse().getContentAsString()).get("reject").asBoolean()
         : "revoked agent NewProxy must be denied";
   }
+
+  @Test @Order(13)
+  void usageAggregatesIntoDailyRollup() throws Exception {
+    // Order 11 recorded 12345/67890 into usage_records for tunnelId (today).
+    context.getBean(com.duox.dtunnel.application.UsageAggregateJob.class).doAggregate();
+
+    String history = doGet(userCookie, "/api/v1/tunnels/" + tunnelId + "/usage/history?days=7");
+    JsonNode h = json.readTree(history);
+    JsonNode days = h.get("days");
+    assert days.isArray() && days.size() >= 1 : "expected at least one daily rollup row";
+    JsonNode today = days.get(0);
+    assert today.get("bytesIn").asLong() >= 12345 : "daily bytesIn should include recorded usage";
+    assert today.get("bytesOut").asLong() >= 67890 : "daily bytesOut should include recorded usage";
+
+    // idempotent: running again must not double-count
+    context.getBean(com.duox.dtunnel.application.UsageAggregateJob.class).doAggregate();
+    String again = doGet(userCookie, "/api/v1/tunnels/" + tunnelId + "/usage/history?days=7");
+    JsonNode days2 = json.readTree(again).get("days");
+    assert days2.get(0).get("bytesIn").asLong() == today.get("bytesIn").asLong()
+        : "aggregate must be idempotent (upsert, not accumulate)";
+  }
 }
+

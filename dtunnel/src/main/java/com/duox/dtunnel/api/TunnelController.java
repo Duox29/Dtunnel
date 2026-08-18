@@ -46,6 +46,17 @@ public class TunnelController {
         "bytesOut", usageService.bytesOut(id));
   }
 
+  /** detail.md §10 aggregateUsage(): daily usage history for charts. */
+  @GetMapping("/{id}/usage/history")
+  public Map<String, Object> usageHistory(@PathVariable UUID id,
+                                          @RequestParam(defaultValue = "30") @Min(1) @Max(365) int days) {
+    User u = currentUser.require();
+    Tunnel t = service.ownedFor(u.getId(), id);
+    return Map.of(
+        "tunnelId", t.getId().toString(),
+        "days", usageService.history(id, days));
+  }
+
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public Map<String, Object> create(@jakarta.validation.Valid @RequestBody CreateTunnelRequest req) {

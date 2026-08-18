@@ -16,4 +16,14 @@ public interface UsageRecordRepository extends JpaRepository<UsageRecord, Long> 
 
   @Query("select coalesce(sum(u.bytesOut), 0) from UsageRecord u where u.tunnelId = :tunnelId")
   long totalBytesOut(@Param("tunnelId") UUID tunnelId);
+
+  /** Per-tunnel per-day sums since a cutoff, for the aggregateUsage() rollup (§10). */
+  @Query(value = """
+      SELECT tunnel_id, bucket_start::date AS day,
+             COALESCE(SUM(bytes_in), 0), COALESCE(SUM(bytes_out), 0)
+      FROM usage_records
+      WHERE bucket_start >= :since
+      GROUP BY tunnel_id, bucket_start::date
+      """, nativeQuery = true)
+  List<Object[]> dailySumsSince(@Param("since") java.time.Instant since);
 }

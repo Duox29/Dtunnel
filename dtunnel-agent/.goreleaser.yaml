@@ -1,0 +1,31 @@
+# detail.md §3.4: cross-compiled release builds for the user agent.
+# Linux + Windows now; macOS when distribution effort allows.
+version: 2
+
+project_name: duox-agent
+
+builds:
+  - id: duox-agent
+    main: ./cmd/duox-agent
+    binary: duox-agent
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+changelog:
+  sort: asc
+
+release:
+  draft: true

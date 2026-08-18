@@ -21,10 +21,13 @@ public class UsageService {
 
   private final UsageRecordRepository usage;
   private final TunnelRepository tunnels;
+  private final com.duox.dtunnel.repo.UsageDailyRepository dailyRepo;
 
-  public UsageService(UsageRecordRepository usage, TunnelRepository tunnels) {
+  public UsageService(UsageRecordRepository usage, TunnelRepository tunnels,
+                      com.duox.dtunnel.repo.UsageDailyRepository dailyRepo) {
     this.usage = usage;
     this.tunnels = tunnels;
+    this.dailyRepo = dailyRepo;
   }
 
   /**
@@ -48,4 +51,18 @@ public class UsageService {
 
   public long bytesIn(UUID tunnelId) { return usage.totalBytesIn(tunnelId); }
   public long bytesOut(UUID tunnelId) { return usage.totalBytesOut(tunnelId); }
+
+  /** Daily rollup (usage_daily, §10 aggregateUsage), newest first, capped at `days`. */
+  public java.util.List<java.util.Map<String, Object>> history(UUID tunnelId, int days) {
+    return dailyRepo.findByTunnelIdOrderByDayDesc(tunnelId).stream()
+        .limit(days)
+        .map(d -> {
+          java.util.Map<String, Object> m = new java.util.LinkedHashMap<String, Object>();
+          m.put("day", d.getDay().toString());
+          m.put("bytesIn", d.getBytesIn());
+          m.put("bytesOut", d.getBytesOut());
+          return m;
+        })
+        .toList();
+  }
 }
