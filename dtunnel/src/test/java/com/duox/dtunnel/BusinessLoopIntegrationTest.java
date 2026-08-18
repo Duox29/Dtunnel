@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -62,7 +62,7 @@ class BusinessLoopIntegrationTest {
   static String agentToken;
   static String tunnelId;
 
-  private String post(String cookie, String url, Object body) throws Exception {
+  private String doPost(String cookie, String url, Object body) throws Exception {
     MvcResult res = mvc.perform(post(url)
             .cookie(cookie == null ? new jakarta.servlet.http.Cookie("x", "x") : sessionCookie(cookie))
             .contentType(MediaType.APPLICATION_JSON)
@@ -74,7 +74,7 @@ class BusinessLoopIntegrationTest {
     return res.getResponse().getContentAsString();
   }
 
-  private String get(String cookie, String url) throws Exception {
+  private String doGet(String cookie, String url) throws Exception {
     MvcResult res = mvc.perform(get(url).cookie(sessionCookie(cookie))).andReturn();
     if (res.getResponse().getStatus() >= 400) {
       throw new AssertionError(url + " -> " + res.getResponse().getStatus() + " " + res.getResponse().getContentAsString());
@@ -112,23 +112,23 @@ class BusinessLoopIntegrationTest {
 
   @Test @Order(2)
   void superadminRegistersNodeAndSeedsPorts() throws Exception {
-    String nodeJson = post(adminCookie, "/api/v1/nodes",
+    String nodeJson = doPost(adminCookie, "/api/v1/nodes",
         Map.of("code", "VN-01", "region", "vietnam", "publicAddress", "127.0.0.1"));
     nodeId = json.readTree(nodeJson).get("id").asText();
 
-    String seed = post(adminCookie, "/api/v1/nodes/" + nodeId + "/ports/seed",
+    String seed = doPost(adminCookie, "/api/v1/nodes/" + nodeId + "/ports/seed",
         Map.of("protocol", "TCP", "start", 20000, "end", 20010));
     assert json.readTree(seed).get("created").asInt() == 11;
   }
 
   @Test @Order(3)
   void userSubmitsRequestAndAdminApproves() throws Exception {
-    String reqJson = post(userCookie, "/api/v1/resource-requests",
+    String reqJson = doPost(userCookie, "/api/v1/resource-requests",
         Map.of("nodeId", nodeId, "protocol", "TCP", "preferredPort", 20005, "durationDays", 30, "purpose", "minecraft"));
     String requestId = json.readTree(reqJson).get("id").asText();
     assert "PENDING".equals(json.readTree(reqJson).get("status").asText());
 
-    String approval = post(adminCookie, "/api/v1/resource-requests/" + requestId + "/approve", null);
+    String approval = doPost(adminCookie, "/api/v1/resource-requests/" + requestId + "/approve", null);
     JsonNode a = json.readTree(approval);
     assert "ALLOCATED".equals(a.get("status").asText());
     allocationId = a.get("allocationId").asText();
@@ -136,7 +136,7 @@ class BusinessLoopIntegrationTest {
 
   @Test @Order(4)
   void agentRegistersAndGetsApproved() throws Exception {
-    String reg = post(null, "/agent/v1/register",
+    String reg = doPost(null, "/agent/v1/register",
         Map.of("email", "user@example.com", "password", "password123",
                "publicKey", "dGVzdC1kZXZpY2Uta2V5LTE=", "platform", "linux", "agentVersion", "0.1.0"));
     JsonNode r = json.readTree(reg);
@@ -144,12 +144,12 @@ class BusinessLoopIntegrationTest {
     agentToken = r.get("token").asText();
     assert "PENDING".equals(r.get("status").asText());
 
-    post(adminCookie, "/api/v1/agents/" + agentId + "/approve", null);
+    doPost(adminCookie, "/api/v1/agents/" + agentId + "/approve", null);
   }
 
   @Test @Order(5)
   void userCreatesTunnel() throws Exception {
-    String t = post(userCookie, "/api/v1/tunnels",
+    String t = doPost(userCookie, "/api/v1/tunnels",
         Map.of("allocationId", allocationId, "agentId", agentId, "name", "mc",
                "targetHost", "127.0.0.1", "targetPort", 25565));
     JsonNode tj = json.readTree(t);
@@ -186,7 +186,7 @@ class BusinessLoopIntegrationTest {
         .andReturn();
     json.readTree(res.getResponse().getContentAsString());
 
-    String tunnels = get(userCookie, "/api/v1/tunnels");
+    String tunnels = doGet(userCookie, "/api/v1/tunnels");
     JsonNode arr = json.readTree(tunnels);
     boolean active = false;
     for (JsonNode t : arr) {
@@ -241,7 +241,7 @@ class BusinessLoopIntegrationTest {
 
   @Test @Order(9)
   void auditTrailCaptured() throws Exception {
-    String audits = get(adminCookie, "/api/v1/audits");
+    String audits = doGet(adminCookie, "/api/v1/audits");
     JsonNode arr = json.readTree(audits);
     assert arr.size() > 0 : "audit trail must not be empty";
   }

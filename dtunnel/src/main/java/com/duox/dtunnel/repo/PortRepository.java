@@ -24,7 +24,7 @@ public interface PortRepository extends JpaRepository<Port, UUID> {
   @Query(value = """
       SELECT * FROM ports
        WHERE node_id = :nodeId AND protocol = :protocol
-         AND port_number IN (:candidates)
+         AND port_number = ANY(:candidates)
          AND status = 'AVAILABLE'
        ORDER BY array_position(:candidates, port_number)
        LIMIT 1
@@ -32,5 +32,5 @@ public interface PortRepository extends JpaRepository<Port, UUID> {
       """, nativeQuery = true)
   Optional<Port> lockFirstAvailable(@Param("nodeId") UUID nodeId,
                                     @Param("protocol") String protocol,
-                                    @Param("candidates") List<Integer> candidates);
+                                    @Param("candidates") int[] candidates);
 }

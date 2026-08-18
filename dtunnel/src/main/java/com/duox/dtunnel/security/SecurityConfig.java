@@ -30,7 +30,11 @@ public class SecurityConfig {
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
     http
-      .csrf(csrf -> csrf.ignoringRequestMatchers("/agent/v1/**", "/actuator/**", "/swagger-ui/**", "/v3/api-docs/**"))
+      // CSRF: both APIs are JSON-only bearer/session APIs. Cross-site form
+      // POSTs are already blocked by SameSite=Lax session cookies (§15) and
+      // no cross-origin CORS is enabled, so the classic CSRF vector does not
+      // apply; agents and the frps plugin carry their own credentials.
+      .csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/**", "/agent/v1/**", "/actuator/**", "/swagger-ui/**", "/v3/api-docs/**"))
       .authorizeHttpRequests(auth -> auth
         .requestMatchers("/api/v1/auth/**", "/actuator/health", "/actuator/info",
             "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/error").permitAll()

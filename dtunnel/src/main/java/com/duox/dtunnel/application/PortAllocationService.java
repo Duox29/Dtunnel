@@ -40,7 +40,8 @@ public class PortAllocationService {
     List<Integer> candidates = buildCandidates(nodeId, protocol, preferredPort);
     if (candidates.isEmpty()) throw ApiException.conflict("no available ports on node " + node.getCode());
 
-    Port port = ports.lockFirstAvailable(nodeId, protocol, candidates)
+    int[] candidateArr = candidates.stream().mapToInt(Integer::intValue).toArray();
+    Port port = ports.lockFirstAvailable(nodeId, protocol, candidateArr)
         .orElseThrow(() -> ApiException.conflict("no available ports on node " + node.getCode() + " (race lost, retry)"));
 
     port.setStatus(PortStatus.ALLOCATED);
