@@ -12,6 +12,7 @@ approved tunnel state.
 | `dtunnel-agent/` | Agents — Go 1.22: `duox-agent` (user side, wraps `frpc`) + `duox-node-agent` (gateway side, health/capacity) |
 | `web/` | Dashboard — React 19, TanStack Router/Query, Tailwind v4 |
 | `deploy/` | Compose stacks + per-node `frps.toml` + Caddy edge |
+| `docs/` | Usage documentation (Vietnamese): [user guide](docs/user-guide.md) + [admin guide](docs/admin-guide.md) |
 | `AUDIT.md` | detail.md compliance audit (section by section) |
 | `progression.md` | Build progression tracker |
 
