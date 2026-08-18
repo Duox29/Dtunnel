@@ -3,8 +3,10 @@ import type { NodeInfo } from "./types";
 
 export const nodesApi = {
   list: () => apiFetch<NodeInfo[]>("GET", "/api/v1/nodes"),
-  register: (code: string, region: string, publicAddress: string) =>
-    apiFetch<NodeInfo>("POST", "/api/v1/nodes", { code, region, publicAddress }),
+  register: (code: string, region: string, publicAddress: string, frpsAdminUrl?: string) =>
+    apiFetch<NodeInfo>("POST", "/api/v1/nodes", { code, region, publicAddress, frpsAdminUrl }),
+  update: (nodeId: string, patch: { publicAddress?: string; frpsAdminUrl?: string }) =>
+    apiFetch<NodeInfo>("PATCH", `/api/v1/nodes/${nodeId}`, patch),
   seedPorts: (nodeId: string, protocol: string, start: number, end: number) =>
     apiFetch<{ created: number }>("POST", `/api/v1/nodes/${nodeId}/ports/seed`, { protocol, start, end }),
   ping: (nodeId: string) =>

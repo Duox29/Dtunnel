@@ -10,8 +10,17 @@ export function useNodes() {
 export function useRegisterNode() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { code: string; region: string; publicAddress: string }) =>
-      nodesApi.register(vars.code, vars.region, vars.publicAddress),
+    mutationFn: (vars: { code: string; region: string; publicAddress: string; frpsAdminUrl?: string }) =>
+      nodesApi.register(vars.code, vars.region, vars.publicAddress, vars.frpsAdminUrl),
+    onSuccess: () => qc.invalidateQueries({ queryKey: nodeKeys.all }),
+  });
+}
+
+export function useUpdateNode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { nodeId: string; patch: { publicAddress?: string; frpsAdminUrl?: string } }) =>
+      nodesApi.update(vars.nodeId, vars.patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: nodeKeys.all }),
   });
 }
