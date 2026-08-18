@@ -66,9 +66,22 @@ ERROR flag, reconciler ERROR→STARTING recovery) calls `publish()` to bump the
 version. A live rebuild in /config could diverge from the stored version and
 strand the agent (bug found + fixed during E2E).
 
-## Milestone 4+ — deferred
+## Milestone 4 — Product Polish
 
-Rate limiting (Bucket4j), full admin polish, PLG stack, gRPC transport — not started.
+| Step | Status | Notes |
+|---|---|---|
+| Full admin dashboard (nodes, ports, tunnels, requests, audit) | ✅ | routes/pages.tsx: Overview/Tunnels/Requests/Agents/Admin; all panels feature-based |
+| User dashboard + intent-based "Create Tunnel" form (v0.1 §28) | ✅ | service presets (SSH/HTTP/HTTPS/RDP/MySQL/Postgres/custom) pre-fill target port + name; labeled fields; live exposure summary |
+| Rate limiting (Bucket4j + Redis, §15) | ✅ | Bucket4j 8.10.1 + bucket4j-redis Lettuce backend (Lettuce 7 credentials API); auth 10/min/IP, agent-register 5/min/IP, resource-requests 30/h/user, node-ping 60/min/user; 429 + Retry-After; filter ordered -200 (before security chain); **verified live: attempts 1-10 → 401, 11-12 → 429** |
+| Prometheus/Grafana/Loki second compose stack | ✅ | deploy/observability/ (docker-compose.observability.yml joins compose_default network); scrapes control-plane /actuator/prometheus (permitted in SecurityConfig); Grafana datasources provisioned; **verified live: up{job="dtunnel-control-plane"}=1, Grafana healthy, Loki ready** |
+| Node Agent exports node health metrics | ⬜ | Node Agent binary itself is an open decision (§16) — deferred with it |
+
+**Observability gotcha:** Prometheus/Grafana run as non-root container users;
+mounted config files must be world-readable (644), not the default 600.
+
+## Milestone 5+ — deferred (Phase 2 candidates)
+
+gRPC transport, HTTP/HTTPS domain routing (Caddy), macOS agent, billing/Stripe — per §14, only after Milestones 1–4 are stable in production use.
 
 ## Boot 4 modularization gotchas (hit during build)
 
