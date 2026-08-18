@@ -1,7 +1,8 @@
 # detail.md Compliance Audit
 
 Section-by-section verification of the implementation against `detail.md` v0.2.
-Audited 2026-08-18 after Milestones 0–4 completion. Legend: ✅ implemented ·
+Audited 2026-08-18 after Milestones 0–4 completion; re-audited after Phase 2
+(Node Agent + HTTP/HTTPS domain routing). Legend: ✅ implemented ·
 🚧 partial · ⬜ deferred (with reason) · 🔀 deliberate deviation (with reason).
 
 ## §0 — The six v0.2 optimizations
@@ -19,8 +20,12 @@ Audited 2026-08-18 after Milestones 0–4 completion. Legend: ✅ implemented ·
 ✅ Control plane / data plane split; USER + SUPERADMIN only; all three state
 machines (request, port, tunnel) implemented; 5-day warning → expiry → 3-day
 grace → release implemented in `LifecycleJobs`.
-⬜ Gateway **Node Agent** — §16 explicitly leaves "separate binary vs mode flag"
-open; deferred with that decision.
+✅ Gateway **Node Agent** (Phase 2) — §16's open decision resolved as a
+**separate binary** (`duox-node-agent`): different privilege/deployment model
+from the user agent. Reports health/capacity (load, memory, disk, frps proxy
+count) via `POST /node/v1/heartbeat` authenticated by a per-node shared secret
+issued at registration, rotatable by SUPERADMIN; stale nodes go OFFLINE
+(`detectStaleNodes`, 120s threshold).
 
 ## §3 — Tech stack
 
@@ -32,13 +37,13 @@ open; deferred with that decision.
 | ShedLock / Bucket4j / springdoc / Testcontainers | ✅ | ShedLock 7.8, Bucket4j 8.10.1 (+bucket4j-redis Lettuce), springdoc 3.1, TC 1.21.3 |
 | Postgres 16 + JSONB + partial indexes | ✅ | V1__init.sql |
 | Redis 7 | ✅ | |
-| Go agent | ✅ | go 1.22; goreleaser config added (§3.4) |
-| duox-node-agent | ⬜ | deferred with §16 Node Agent decision |
+| Go agent | ✅ | go 1.22; goreleaser builds both binaries for linux/windows/darwin amd64+arm64 (§3.4) |
+| duox-node-agent | ✅ | Phase 2: separate binary (§16 decision), health/capacity heartbeat |
 | React/TS/Vite | 🔀 | React **19** (spec: 18) — newer major, same APIs used |
 | Tailwind + token-based UI | 🔀 | custom Tailwind v4 design tokens + hand-rolled ui kit instead of literal shadcn/ui — matches spec intent ("design tokens, not a heavy pre-styled kit") |
 | TanStack Query + Router | ✅ | |
 | Recharts | ✅ | usage charts (added in frontend polish) |
-| Caddy (HTTP/HTTPS) | ⬜ | deferred to Phase 2 per spec §3.6 |
+| Caddy (HTTP/HTTPS) | ✅ | Phase 2 (§3.6): Caddy edge container → frps vhostHTTPPort; domain-routed HTTP tunnels |
 | PLG observability | ✅ | deploy/observability second compose stack; Prometheus scrapes /actuator/prometheus |
 | OpenTelemetry traces | ⬜ | not in any milestone's build list; deferred |
 | Docker Compose | ✅ | deploy/compose (+ e2e variant) |
@@ -62,8 +67,10 @@ MVP; registration rate limits are the active anti-abuse control. Flagged for
 production hardening.
 
 ## §7 — Schema
-✅ All tables present (V1) + `nodes.frps_admin_url` (V2) + `usage_daily` (V3).
-Flyway-managed, `ddl-auto=validate`.
+✅ All tables present (V1) + `nodes.frps_admin_url` (V2) + `usage_daily` (V3)
++ node agent columns (V4: `node_token`, `last_seen_at`) + HTTP tunnels (V5:
+`tunnels.tunnel_type/domain/node_id`, partial unique `uq_tunnel_domain`,
+`nodes.vhost_http_port`). Flyway-managed, `ddl-auto=validate`.
 
 ## §8 — API
 ✅ All listed endpoints implemented except:
@@ -75,12 +82,15 @@ Session-cookie auth with Redis store, rotated on login, SameSite=Lax. ✅
 ✅ Full flow verified live: config poll → frpc start → Login hook → NewProxy
 authorization (ownership + allocation ACTIVE + node/protocol/port match) →
 ACTIVE. CloseProxy feeds status; Ping for liveness. allowPorts backstop in
-frps.toml.
+frps.toml. Phase 2: NewProxy also polices HTTP proxies — the claimed
+`custom_domains` must exactly match the tunnel's registered domain (Order 15
+test; wrong-domain attempts denied).
 
 ## §10 — Background jobs
-✅ All six: expiration warnings, expirations, grace releases, stale agents,
-**aggregateUsage** (UsageAggregateJob → usage_daily, idempotent upsert, Order 13
-test), reconcileDesiredVsObserved. All ShedLock-guarded.
+✅ All seven: expiration warnings, expirations, grace releases, stale agents,
+**stale nodes** (Phase 2), **aggregateUsage** (UsageAggregateJob → usage_daily,
+idempotent upsert, Order 13 test), reconcileDesiredVsObserved. All
+ShedLock-guarded. Usage collector also polls frps `http` proxies (Phase 2).
 
 ## §11 — Reconciliation
 ✅ Desired-vs-observed with ERROR recovery; `configuration_versions` is the
@@ -94,8 +104,10 @@ fixed; publish on every desired-set change).
 progression.md at repo root.
 
 ## §13 — Compose
-✅ Core stack (postgres/redis/control-plane/frps) + second observability file,
-exactly as §13/§14 prescribe. frps pinned v0.71.0 (no `latest` tag upstream).
+✅ Core stack (postgres/redis/control-plane/frps) + **web** (multi-stage
+Dockerfile, nginx SPA + deferred-DNS API proxy) + **caddy** (HTTP edge, Phase 2)
++ second observability file, exactly as §13/§14 prescribe. frps pinned
+v0.71.0 (no `latest` tag upstream).
 
 ## §14 — Milestones
 ✅ 0–4 complete and verified live (see progression.md). Milestone 5 items are
@@ -108,13 +120,24 @@ partial unique index; Bucket4j rate limits on auth/register/requests/ping;
 audit on every SUPERADMIN action + revocation **with source IP**
 (AuditService.currentIp, X-Forwarded-For aware); secrets via env only.
 
-## §16 — Open decisions (unchanged, correctly deferred)
-- Free-tier limits — product decision.
+## §16 — Open decisions
+- Free-tier limits — product decision (billing deferred).
 - Postgres-outage degraded behavior — needs failure-mode testing.
-- Node Agent binary shape — deferred.
+- ~~Node Agent binary shape~~ — **resolved**: separate `duox-node-agent` binary.
+
+## Phase 2 additions (beyond Milestones 0–4)
+- **Node Agent** (§1/§3.4/§16): `duox-node-agent` + `/node/v1/heartbeat` +
+  token rotation + stale-node detection + capacity in node JSON.
+- **HTTP/HTTPS domain routing** (§3.6): `POST /api/v1/tunnels/http` (domain
+  normalization + platform-wide uniqueness), desired-state http proxies,
+  plugin domain policing, frps `vhostHTTPPort`, Caddy edge, frontend
+  dual-mode create form.
+- **Web service in compose** (§13 gap) + goreleaser darwin (§3.4).
 
 ## Test evidence
-14/14 integration tests green (Testcontainers Postgres 16 + Redis 7):
+16/16 integration tests green (Testcontainers Postgres 16 + Redis 7):
 business loop, multi-tunnel, frps usage metering, revocation propagation,
-usage aggregation idempotency. Live E2E: real frpc 0.71 ↔ frps ↔ plugin,
-two tunnels ACTIVE with data flowing, ERROR recovery, rate limiting, PLG up.
+usage aggregation idempotency, node-agent heartbeat + token rotation, HTTP
+domain routing + plugin policing. Live E2E: real frpc 0.71 ↔ frps ↔ plugin,
+TCP tunnels ACTIVE, **HTTP tunnel ACTIVE through Caddy edge** (Host-routed),
+node agent ONLINE reporting capacity, ERROR recovery, rate limiting, PLG up.

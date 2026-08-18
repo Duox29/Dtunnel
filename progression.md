@@ -74,7 +74,7 @@ strand the agent (bug found + fixed during E2E).
 | User dashboard + intent-based "Create Tunnel" form (v0.1 §28) | ✅ | service presets (SSH/HTTP/HTTPS/RDP/MySQL/Postgres/custom) pre-fill target port + name; labeled fields; live exposure summary |
 | Rate limiting (Bucket4j + Redis, §15) | ✅ | Bucket4j 8.10.1 + bucket4j-redis Lettuce backend (Lettuce 7 credentials API); auth 10/min/IP, agent-register 5/min/IP, resource-requests 30/h/user, node-ping 60/min/user; 429 + Retry-After; filter ordered -200 (before security chain); **verified live: attempts 1-10 → 401, 11-12 → 429** |
 | Prometheus/Grafana/Loki second compose stack | ✅ | deploy/observability/ (docker-compose.observability.yml joins compose_default network); scrapes control-plane /actuator/prometheus (permitted in SecurityConfig); Grafana datasources provisioned; **verified live: up{job="dtunnel-control-plane"}=1, Grafana healthy, Loki ready** |
-| Node Agent exports node health metrics | ⬜ | Node Agent binary itself is an open decision (§16) — deferred with it |
+| Node Agent exports node health metrics | ✅ | done in Phase 2 (below): duox-node-agent heartbeat → nodes.capacity_json |
 
 **Observability gotcha:** Prometheus/Grafana run as non-root container users;
 mounted config files must be world-readable (644), not the default 600.
@@ -89,9 +89,34 @@ mounted config files must be world-readable (644), not the default 600.
 | goreleaser (§3.4) | ✅ | dtunnel-agent/.goreleaser.yaml — linux/windows amd64+arm64 |
 | Frontend polish (market-style) | ✅ | ngrok/Cloudflare/Tailscale patterns: sidebar shell + icons, KPI stat cards, Recharts traffic chart (§3.5), status pills w/ dot+pulse, relative time, empty states, toasts, confirm dialogs, copy buttons, split-panel login; verified via Vite dev server against live API |
 
-## Milestone 5+ — deferred (Phase 2 candidates)
+## Phase 2 — Node Agent + HTTP/HTTPS domain routing
 
-gRPC transport, HTTP/HTTPS domain routing (Caddy), macOS agent, billing/Stripe — per §14, only after Milestones 1–4 are stable in production use.
+| Step | Status | Notes |
+|---|---|---|
+| Web service in compose (§13 gap) | ✅ | web/Dockerfile (multi-stage node→nginx) + nginx.conf (SPA fallback, deferred-DNS /api + /agent proxy); :3000 serves SPA + proxies API |
+| goreleaser: darwin + both binaries (§3.4) | ✅ | linux/windows/darwin amd64+arm64 for duox-agent **and** duox-node-agent |
+| Node Agent binary (§1/§3.4, §16 decision) | ✅ | **duox-node-agent** — separate binary (privilege/deployment model); health/capacity sampling (load/mem/disk from /proc + statfs, frps proxy count via admin API, cross-platform fallbacks); heartbeat loop |
+| Node Agent control plane | ✅ | V4 (node_token, last_seen_at); POST /node/v1/heartbeat (node_token bearer auth); token issued at registration + SUPERADMIN rotate endpoint; stale-node OFFLINE detection (120s); capacity/lastSeen in node JSON; Order 14 test (heartbeat + rotation) |
+| HTTP/HTTPS domain routing (§3.6) | ✅ | V5 (tunnel_type/domain/node_id + partial unique domain index + nodes.vhost_http_port); POST /api/v1/tunnels/http (domain normalize + uniqueness); desired-state http proxies; FRP plugin polices custom_domains vs registered domain; usage collector polls http proxies; Go agent renders customDomains; frps vhostHTTPPort=8081; Caddy edge container (:8090 → frps vhost); Order 15 test |
+| Frontend: HTTP tunnels | ✅ | dual-mode create form (Port TCP/UDP vs Domain HTTP), node picker by vhost port, HTTP type chip + domain endpoint in rows |
+| Live E2E verification | ✅ | e2e-web tunnel ACTIVE; frps http proxy online; **curl through Caddy :8090 with Host: demo.duox.local → 200 from local target**; node agent ONLINE reporting capacity (load/mem/frpsProxies); 16/16 tests green |
+
+**Node Agent design note (§16 resolved):** separate binary, not a mode flag —
+the gateway host runs frps and must not carry user-device credentials. Auth is
+a per-node shared secret (rotatable), not the Ed25519 device flow.
+
+**HTTP routing design note (§3.6):** HTTP tunnels skip port allocation entirely
+(shared frps vhost port, Host-header routing). Authorization stays server-side:
+the plugin rejects any NewProxy whose custom_domains ≠ the tunnel's registered
+domain, so a leaked agent token still can't claim arbitrary domains. Caddy is
+the TLS edge (auto_https off in local dev; production gets automatic certs).
+
+## Milestone 5+ — deferred
+
+gRPC transport (push-config + sub-second revocation), billing/Stripe (deferred
+by product decision) — per §14, only after Milestones 1–4 are stable in
+production use. QoS max-connections remains blocked on frp (no per-proxy TCP
+connection limit).
 
 ## Boot 4 modularization gotchas (hit during build)
 
@@ -117,3 +142,6 @@ Other environment fixes:
 - frps image pinned to `fatedier/frps:v0.71.0` (no `latest` tag exists).
 - FRP plugin protocol (from frp source pkg/plugin/server/types.go): Login has flat `user` string; NewProxy/Ping/CloseProxy wrap identity in UserInfo object; response key is `reject_reason`.
 - Web: industrial-grade layout per §12 — features/ by domain (types+api+hooks+components), components/ui, routes/ with TanStack Router guards + TanStack Query, Tailwind v4.
+- §16 Node Agent decision: **separate binary** (duox-node-agent) with per-node shared-secret auth + rotation; gateway host never holds user device keys.
+- §3.6 HTTP tunnels: domain-routed over the node's shared frps vhost port (no per-tunnel port allocation); Caddy terminates TLS at the edge; local dev edge on :8090 (auto_https off).
+- nginx upstream resolution: static proxy_pass fails at startup if the upstream is down → use resolver 127.0.0.11 + variable for deferred DNS.
