@@ -37,6 +37,9 @@ public class SecurityConfig {
       .csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/**", "/agent/v1/**", "/actuator/**", "/swagger-ui/**", "/v3/api-docs/**"))
       .authorizeHttpRequests(auth -> auth
         .requestMatchers("/api/v1/auth/**", "/actuator/health", "/actuator/info",
+            // Prometheus scrape endpoint (Milestone 4.4): metrics only, no
+            // secrets; production restricts this via network policy, not auth.
+            "/actuator/prometheus",
             "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/error").permitAll()
         .requestMatchers("/agent/v1/register", "/agent/v1/frp-plugin").permitAll() // own auth inside
         .requestMatchers("/agent/v1/**").authenticated()
