@@ -452,6 +452,26 @@ class BusinessLoopIntegrationTest {
             .contentType(MediaType.APPLICATION_JSON)
             .content("{}"))
         .andExpect(status().isUnauthorized());
+
+    // 4) SUPERADMIN rotation (§15): new token works, old token is dead
+    MvcResult rot = mvc.perform(post("/api/v1/nodes/" + nodeId + "/rotate-token")
+            .cookie(sessionCookie(adminCookie)))
+        .andExpect(status().isOk())
+        .andReturn();
+    String rotated = json.readTree(rot.getResponse().getContentAsString()).get("nodeToken").asText();
+    assert !rotated.equals(nodeToken) : "rotation must issue a new token";
+
+    mvc.perform(post("/node/v1/heartbeat")
+            .header("Authorization", "Bearer " + nodeToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{}"))
+        .andExpect(status().isUnauthorized());
+
+    mvc.perform(post("/node/v1/heartbeat")
+            .header("Authorization", "Bearer " + rotated)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("metrics", Map.of("hostname", "vn-01")))))
+        .andExpect(status().isOk());
   }
 
   @Test @Order(15)

@@ -81,6 +81,20 @@ public class NodeController {
     return json(n);
   }
 
+  /**
+   * SUPERADMIN: issue or rotate the Node Agent shared secret (§15 rotation).
+   * Also backfills tokens for nodes registered before the Node Agent existed.
+   */
+  @PostMapping("/{id}/rotate-token")
+  public Map<String, Object> rotateToken(@PathVariable UUID id) {
+    var admin = currentUser.requireSuperadmin();
+    Node n = nodes.findById(id)
+        .orElseThrow(() -> com.duox.dtunnel.application.ApiException.notFound("node"));
+    n.setNodeToken(java.util.UUID.randomUUID().toString().replace("-", ""));
+    nodes.save(n);
+    return Map.of("nodeId", n.getId().toString(), "nodeToken", n.getNodeToken());
+  }
+
   @PostMapping("/{id}/ports/seed")
   public Map<String, Object> seedPorts(@PathVariable UUID id,
                                        @jakarta.validation.Valid @RequestBody SeedPortsRequest req) {
