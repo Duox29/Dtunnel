@@ -43,10 +43,13 @@ Update after every successful step; each entry maps to a git commit.
 
 | Step | Status | Notes |
 |---|---|---|
-| Multiple tunnels per agent | ✅ | test: 2 proxies in desired state, both ACTIVE (Order 10) |
-| Usage metering (usage_records) | ✅ | **server-side** per §1: UsageCollectorJob polls each node's frps admin API (`/api/proxy/{type}` → todayTrafficIn/Out), records deltas into usage_records; `GET /api/v1/tunnels/{id}/usage`; nodes.frps_admin_url (V2) + `PATCH /api/v1/nodes/{id}`; test uses stub frps endpoint (Order 11) |
-| Second node + selection UX | ⬜ | |
-| QoS: bandwidthLimit + max connections | 🚧 partial | bandwidthLimit rendered in frpc.toml; enforcement untested |
+| Multiple tunnels per agent | ✅ | test: 2 proxies in desired state, both ACTIVE (Order 10); live: 2 tunnels ACTIVE on one agent |
+| Usage metering (usage_records) | ✅ | **server-side** per §1: UsageCollectorJob polls each node's frps admin API (`/api/proxy/{type}` → todayTrafficIn/Out), records deltas into usage_records; `GET /api/v1/tunnels/{id}/usage`; nodes.frps_admin_url (V2) + `PATCH /api/v1/nodes/{id}`; test uses stub frps endpoint (Order 11); live: 3000B in / 42B out collected |
+| Second node + selection UX | ✅ | SG-01 registered live; RequestsPanel already has node selector |
+| QoS: bandwidthLimit | ✅ | Mbps→KB unit fix (frp unit = bytes/s); 5Mbps renders `transport.bandwidthLimit = "610KB"`; verified live |
+| QoS: max connections | ⬜ | frp has no per-proxy max-connections for TCP; would need a different mechanism — deferred |
+| ERROR recovery (§11) | ✅ | reconciler re-arms ERROR→STARTING when agent back ONLINE + republishes; verified live (kill agent → ERROR → restart → ACTIVE) |
+| Desired-state sync (§11) | ✅ | **critical fix**: /config returns STORED configuration_versions payload (single source of truth) so version always matches payload; publish on every desired-set change (CloseProxy ERROR, reconciler ERROR flag) |
 
 **Usage architecture note:** frpc v0.71 exposes NO client-side traffic API
 (`/api/status` has no counters; no client Prometheus metrics). frps DOES expose
@@ -54,6 +57,14 @@ per-proxy daily counters via its admin API. Since §1 says the server is
 authoritative, collection lives in the control plane (UsageCollectorJob,
 ShedLock-guarded, 60s poll, delta-based with day-rollover handling).
 Agent-side sampling was built then removed as dead code.
+
+**Desired-state sync note (§11):** `configuration_versions` is the single source
+of truth. `/agent/v1/config` returns the STORED payload (not a live rebuild) so
+the version number always matches what the agent applies. Every transition that
+changes the desired set (create/start/stop/delete, CloseProxy→ERROR, reconciler
+ERROR flag, reconciler ERROR→STARTING recovery) calls `publish()` to bump the
+version. A live rebuild in /config could diverge from the stored version and
+strand the agent (bug found + fixed during E2E).
 
 ## Milestone 4+ — deferred
 
