@@ -2,6 +2,12 @@
 # so the plugin callback uses host.docker.internal (mapped via host-gateway).
 bindPort = 7000
 
+# Admin API — the control plane polls this for per-proxy traffic counters
+# (usage metering, detail.md Milestone 3.3). Bind loopback inside the
+# container; the control plane reaches it via the compose network.
+webServer.addr = "0.0.0.0"
+webServer.port = 7500
+
 allowPorts = [
   { start = 20000, end = 20100 }
 ]

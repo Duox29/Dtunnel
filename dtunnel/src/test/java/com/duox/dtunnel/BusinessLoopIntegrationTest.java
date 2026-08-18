@@ -53,6 +53,7 @@ class BusinessLoopIntegrationTest {
 
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper json;
+  @Autowired org.springframework.context.ApplicationContext context;
 
   static String userCookie;
   static String adminCookie;
@@ -296,22 +297,54 @@ class BusinessLoopIntegrationTest {
     assert active == 2 : "both tunnels should be ACTIVE, got " + active;
   }
 
-  /** detail.md Milestone 3.3: usage counters reported via heartbeat are metered. */
+  /**
+   * detail.md Milestone 3.3 + §1: usage is collected SERVER-SIDE from the
+   * node's frps admin API (frpc v0.71 has no client traffic API). We stub
+   * the frps endpoint, point the node at it, and run the collector.
+   */
   @Test @Order(11)
-  void usageMetering() throws Exception {
-    mvc.perform(post("/agent/v1/heartbeat")
-            .header("Authorization", "Bearer " + agentToken)
-            .contentType(MediaType.APPLICATION_JSON)
-            .content(json.writeValueAsString(Map.of(
-                "appliedVersion", 2,
-                "tunnels", List.of(Map.of(
-                    "tunnelId", tunnelId, "status", "RUNNING",
-                    "bytesIn", 12345, "bytesOut", 67890, "activeSeconds", 60))))))
-        .andExpect(status().isOk());
+  void usageMeteringFromFrps() throws Exception {
+    // stub frps admin API serving per-proxy traffic counters
+    com.sun.net.httpserver.HttpServer stub =
+        com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(0), 0);
+    String body = json.writeValueAsString(Map.of("proxies", List.of(Map.of(
+        "name", "someuser.tunnel-" + tunnelId,
+        "type", "tcp",
+        "todayTrafficIn", 12345,
+        "todayTrafficOut", 67890,
+        "status", "online"))));
+    stub.createContext("/api/proxy/tcp", ex -> {
+      byte[] b = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      ex.getResponseHeaders().set("Content-Type", "application/json");
+      ex.sendResponseHeaders(200, b.length);
+      ex.getResponseBody().write(b);
+      ex.close();
+    });
+    stub.createContext("/api/proxy/udp", ex -> {
+      byte[] b = "{\"proxies\":[]}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      ex.sendResponseHeaders(200, b.length);
+      ex.getResponseBody().write(b);
+      ex.close();
+    });
+    stub.start();
+    try {
+      // point the node at the stub frps admin API
+      String stubUrl = "http://127.0.0.1:" + stub.getAddress().getPort();
+      var nodeRepo = context.getBean(com.duox.dtunnel.repo.NodeRepository.class);
+      var node = nodeRepo.findById(java.util.UUID.fromString(nodeId)).orElseThrow();
+      node.setFrpsAdminUrl(stubUrl);
+      nodeRepo.save(node);
 
-    String usage = doGet(userCookie, "/api/v1/tunnels/" + tunnelId + "/usage");
-    JsonNode u = json.readTree(usage);
-    assert u.get("bytesIn").asLong() >= 12345 : "bytesIn should be metered";
-    assert u.get("bytesOut").asLong() >= 67890 : "bytesOut should be metered";
+      // run the collector's lock-free body directly (the @SchedulerLock wrapper
+      // would be skipped while the scheduled run holds the lock)
+      context.getBean(com.duox.dtunnel.application.UsageCollectorJob.class).doCollect();
+
+      String usage = doGet(userCookie, "/api/v1/tunnels/" + tunnelId + "/usage");
+      JsonNode u = json.readTree(usage);
+      assert u.get("bytesIn").asLong() >= 12345 : "bytesIn should be metered from frps";
+      assert u.get("bytesOut").asLong() >= 67890 : "bytesOut should be metered from frps";
+    } finally {
+      stub.stop(0);
+    }
   }
 }

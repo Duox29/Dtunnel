@@ -27,19 +27,21 @@ public class UsageService {
     this.tunnels = tunnels;
   }
 
+  /**
+   * Server-side collection (authoritative, detail.md §1): the control plane
+   * reads per-proxy traffic counters from the node's frps admin API and
+   * records the delta. No agent involvement.
+   */
   @Transactional
-  public UsageRecord record(UUID agentId, UUID tunnelId, long bytesIn, long bytesOut, int activeSeconds) {
+  public UsageRecord recordFromFrps(UUID tunnelId, long bytesIn, long bytesOut) {
     Tunnel t = tunnels.findById(tunnelId)
         .orElseThrow(() -> ApiException.notFound("tunnel"));
-    if (!t.getAgentId().equals(agentId)) throw ApiException.forbidden("tunnel belongs to another agent");
-    if (bytesIn < 0 || bytesOut < 0 || activeSeconds < 0) throw ApiException.badRequest("negative usage");
-
+    if (bytesIn < 0 || bytesOut < 0) return null;
     UsageRecord u = new UsageRecord();
     u.setTunnelId(tunnelId);
     u.setBytesIn(bytesIn);
     u.setBytesOut(bytesOut);
-    u.setActiveSeconds(activeSeconds);
-    // bucket to the current hour for cheap roll-up
+    u.setActiveSeconds(0);
     u.setBucketStart(Instant.now().truncatedTo(ChronoUnit.HOURS));
     return usage.save(u);
   }

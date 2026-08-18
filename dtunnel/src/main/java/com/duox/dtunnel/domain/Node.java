@@ -24,6 +24,10 @@ public class Node {
   @Column(name = "public_address", nullable = false)
   private String publicAddress;
 
+  /** Base URL of this node's frps admin API (usage metering, Milestone 3.3). */
+  @Column(name = "frps_admin_url")
+  private String frpsAdminUrl;
+
   @JdbcTypeCode(SqlTypes.ARRAY)
   @Column(name = "protocol_capabilities", nullable = false)
   private List<String> protocolCapabilities = List.of("TCP", "UDP");
@@ -43,6 +47,8 @@ public class Node {
   public void setRegion(String region) { this.region = region; }
   public String getPublicAddress() { return publicAddress; }
   public void setPublicAddress(String publicAddress) { this.publicAddress = publicAddress; }
+  public String getFrpsAdminUrl() { return frpsAdminUrl; }
+  public void setFrpsAdminUrl(String frpsAdminUrl) { this.frpsAdminUrl = frpsAdminUrl; }
   public List<String> getProtocolCapabilities() { return protocolCapabilities; }
   public void setProtocolCapabilities(List<String> protocolCapabilities) { this.protocolCapabilities = protocolCapabilities; }
   public Map<String, Object> getCapacityJson() { return capacityJson; }

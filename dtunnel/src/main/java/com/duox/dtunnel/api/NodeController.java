@@ -21,7 +21,8 @@ import java.util.UUID;
 public class NodeController {
 
   public record RegisterNodeRequest(@NotBlank String code, @NotBlank String region,
-                                    @NotBlank String publicAddress, List<String> protocolCapabilities) {}
+                                    @NotBlank String publicAddress, List<String> protocolCapabilities,
+                                    String frpsAdminUrl) {}
   public record SeedPortsRequest(@NotBlank String protocol,
                                  @Min(1) @Max(65535) int start,
                                  @Min(1) @Max(65535) int end) {}
@@ -56,7 +57,22 @@ public class NodeController {
   public Map<String, Object> register(@jakarta.validation.Valid @RequestBody RegisterNodeRequest req) {
     var admin = currentUser.requireSuperadmin();
     Node n = nodeService.registerNode(admin.getEmail(), req.code(), req.region(),
-        req.publicAddress(), req.protocolCapabilities());
+        req.publicAddress(), req.protocolCapabilities(), req.frpsAdminUrl());
+    return json(n);
+  }
+
+  public record UpdateNodeRequest(String publicAddress, String frpsAdminUrl) {}
+
+  /** SUPERADMIN: update node endpoints (e.g. point usage collection at frps admin API). */
+  @PatchMapping("/{id}")
+  public Map<String, Object> update(@PathVariable UUID id,
+                                    @RequestBody UpdateNodeRequest req) {
+    currentUser.requireSuperadmin();
+    Node n = nodes.findById(id)
+        .orElseThrow(() -> com.duox.dtunnel.application.ApiException.notFound("node"));
+    if (req.publicAddress() != null && !req.publicAddress().isBlank()) n.setPublicAddress(req.publicAddress());
+    if (req.frpsAdminUrl() != null) n.setFrpsAdminUrl(req.frpsAdminUrl().isBlank() ? null : req.frpsAdminUrl());
+    nodes.save(n);
     return json(n);
   }
 
@@ -90,6 +106,7 @@ public class NodeController {
     m.put("region", n.getRegion());
     m.put("publicAddress", n.getPublicAddress());
     m.put("protocolCapabilities", n.getProtocolCapabilities());
+    m.put("frpsAdminUrl", n.getFrpsAdminUrl());
     m.put("status", n.getStatus().name());
     return m;
   }

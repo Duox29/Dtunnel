@@ -4,7 +4,6 @@ import com.duox.dtunnel.application.AgentService;
 import com.duox.dtunnel.application.ApiException;
 import com.duox.dtunnel.application.AuditService;
 import com.duox.dtunnel.application.DesiredStateService;
-import com.duox.dtunnel.application.UsageService;
 import com.duox.dtunnel.domain.Agent;
 import com.duox.dtunnel.domain.AgentStatus;
 import com.duox.dtunnel.domain.Tunnel;
@@ -42,9 +41,11 @@ public class AgentApiController {
                                 @NotBlank String publicKey, String platform, String agentVersion) {}
   public record HeartbeatRequest(Integer appliedVersion, String agentVersion,
                                  List<TunnelReport> tunnels) {}
-  /** Sampled traffic counters per tunnel (detail.md Milestone 3.3). */
-  public record TunnelReport(String tunnelId, String status,
-                             Long bytesIn, Long bytesOut, Integer activeSeconds) {}
+  /**
+   * Observed per-tunnel state. Usage metering is collected server-side from
+   * the node's frps admin API (detail.md Milestone 3.3 + §1), not reported here.
+   */
+  public record TunnelReport(String tunnelId, String status) {}
 
   private final UserRepository users;
   private final PasswordEncoder encoder;
@@ -54,12 +55,10 @@ public class AgentApiController {
   private final DesiredStateService desiredState;
   private final TunnelRepository tunnels;
   private final AuditService audit;
-  private final UsageService usageService;
 
   public AgentApiController(UserRepository users, PasswordEncoder encoder, AgentService agentService,
                             AgentRepository agents, AgentTokenService tokens,
-                            DesiredStateService desiredState, TunnelRepository tunnels, AuditService audit,
-                            UsageService usageService) {
+                            DesiredStateService desiredState, TunnelRepository tunnels, AuditService audit) {
     this.users = users;
     this.encoder = encoder;
     this.agentService = agentService;
@@ -68,7 +67,6 @@ public class AgentApiController {
     this.desiredState = desiredState;
     this.tunnels = tunnels;
     this.audit = audit;
-    this.usageService = usageService;
   }
 
   /** detail.md §6: first-run registration binds the device public key to a user account. */
@@ -150,17 +148,6 @@ public class AgentApiController {
             }
           }
           default -> { }
-        }
-        // usage metering: record sampled counters when the agent reports them
-        if (r.bytesIn() != null || r.bytesOut() != null) {
-          try {
-            usageService.record(a.getId(), tid,
-                r.bytesIn() == null ? 0 : r.bytesIn(),
-                r.bytesOut() == null ? 0 : r.bytesOut(),
-                r.activeSeconds() == null ? 0 : r.activeSeconds());
-          } catch (RuntimeException ignored) {
-            // usage is best-effort; never fail the heartbeat over it
-          }
         }
       }
     }

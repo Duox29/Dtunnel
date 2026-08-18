@@ -45,6 +45,7 @@ services:
     depends_on: [control-plane]
     ports:
       - "7000:7000"
+      - "7500:7500"
       - "20000-20100:20000-20100"
 
 volumes:

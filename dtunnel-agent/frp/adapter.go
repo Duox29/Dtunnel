@@ -41,10 +41,8 @@ func (a *Adapter) RenderConfig(agentID, deviceToken string, proxies []control.Pr
 	} else {
 		b.WriteString("serverAddr = \"127.0.0.1\"\nserverPort = 7000\n")
 	}
-	// local admin server so the runtime can sample per-proxy traffic counters
-	// for usage metering (detail.md Milestone 3.3). Loopback only.
-	b.WriteString("webServer.addr = \"127.0.0.1\"\n")
-	b.WriteString("webServer.port = 7400\n")
+	// NOTE: usage metering is collected server-side from the frps admin API
+	// (detail.md Milestone 3.3 + §1); frpc v0.71 exposes no client traffic API.
 	// detail.md §9: identity travels in the frpc "user" field as
 	// "<agentId>.<deviceToken>"; the plugin validates it on every op.
 	fmt.Fprintf(&b, "user = %q\n\n", agentID+"."+deviceToken)

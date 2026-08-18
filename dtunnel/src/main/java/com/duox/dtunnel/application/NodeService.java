@@ -28,12 +28,13 @@ public class NodeService {
 
   @Transactional
   public Node registerNode(String actor, String code, String region, String publicAddress,
-                           List<String> capabilities) {
+                           List<String> capabilities, String frpsAdminUrl) {
     if (nodes.findByCode(code).isPresent()) throw ApiException.conflict("node code exists: " + code);
     Node n = new Node();
     n.setCode(code);
     n.setRegion(region);
     n.setPublicAddress(publicAddress);
+    n.setFrpsAdminUrl(frpsAdminUrl);
     if (capabilities != null && !capabilities.isEmpty()) n.setProtocolCapabilities(capabilities);
     n.setStatus(NodeStatus.ONLINE);
     nodes.save(n);

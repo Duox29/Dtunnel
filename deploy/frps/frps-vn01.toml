@@ -2,6 +2,11 @@
 # Per-tunnel authorization happens via the httpPlugins callback, not here.
 bindPort = 7000
 
+# Admin API — the control plane polls this for per-proxy traffic counters
+# (usage metering, detail.md Milestone 3.3).
+webServer.addr = "0.0.0.0"
+webServer.port = 7500
+
 # broad range owned by this node; the platform only hands out ports inside it
 allowPorts = [
   { start = 20000, end = 20100 }
