@@ -347,4 +347,55 @@ class BusinessLoopIntegrationTest {
       stub.stop(0);
     }
   }
+
+  @Test @Order(12)
+  void revocationPropagatesToAgentAndFrpPlugin() throws Exception {
+    // SUPERADMIN revokes the agent (terminal by design — device must re-register)
+    MvcResult rev = mvc.perform(post("/api/v1/agents/" + agentId + "/revoke")
+            .cookie(sessionCookie(adminCookie)))
+        .andExpect(status().isOk())
+        .andReturn();
+    assert "REVOKED".equals(json.readTree(rev.getResponse().getContentAsString()).get("status").asText());
+
+    // 1) Bearer token is rejected at the filter on the very next request (§4, §15)
+    mvc.perform(get("/agent/v1/config")
+            .header("Authorization", "Bearer " + agentToken))
+        .andExpect(status().isUnauthorized());
+
+    // 2) Heartbeat is rejected too
+    mvc.perform(post("/agent/v1/heartbeat")
+            .header("Authorization", "Bearer " + agentToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of(
+                "appliedVersion", 1, "agentVersion", "0.1.0", "tunnels", List.of()))))
+        .andExpect(status().isUnauthorized());
+
+    // 3) FRP plugin denies Login for the revoked identity
+    String userField = agentId + "." + agentToken;
+    MvcResult login = mvc.perform(post("/agent/v1/frp-plugin")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of(
+                "version", "0.63.0", "op", "Login",
+                "content", Map.of("user", userField, "remoteAddr", "1.2.3.4:5678")))))
+        .andExpect(status().isOk())
+        .andReturn();
+    assert json.readTree(login.getResponse().getContentAsString()).get("reject").asBoolean()
+        : "revoked agent Login must be denied";
+
+    // 4) FRP plugin denies NewProxy for the revoked identity
+    Map<String, Object> userInfo = Map.of("user", userField, "metas", Map.of(), "run_id", "rev-run");
+    MvcResult np = mvc.perform(post("/agent/v1/frp-plugin")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of(
+                "version", "0.63.0", "op", "NewProxy",
+                "content", Map.of(
+                    "user", userInfo,
+                    "proxy_name", userField + ".tunnel-" + tunnelId,
+                    "proxy_type", "tcp",
+                    "remote_port", 20005)))))
+        .andExpect(status().isOk())
+        .andReturn();
+    assert json.readTree(np.getResponse().getContentAsString()).get("reject").asBoolean()
+        : "revoked agent NewProxy must be denied";
+  }
 }
