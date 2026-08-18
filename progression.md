@@ -36,7 +36,7 @@ Update after every successful step; each entry maps to a git commit.
 |---|---|---|
 | Expiration/grace jobs with ShedLock (§10) | ✅ | LifecycleJobs: warnings/expiry/grace/stale/reconcile |
 | Stale-agent detection (60s, §10) | ✅ | |
-| Revocation propagation (§4) | ⬜ partial | status check per request already in AgentTokenFilter |
+| Revocation propagation (§4) | ✅ | AgentTokenFilter rejects REVOKED on every request (401); /config FORBIDDEN; FRP plugin denies Login/NewProxy; **terminal by design** (device must re-register); Order 12 test verifies all four paths |
 | Audit logging on mutating actions (§15) | ✅ | AuditService wired into services |
 
 ## Milestone 3 — Multi-Tunnel, Multi-Node
