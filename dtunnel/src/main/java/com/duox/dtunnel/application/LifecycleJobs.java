@@ -32,21 +32,47 @@ public class LifecycleJobs {
   private final PortRepository ports;
   private final TunnelRepository tunnels;
   private final AgentRepository agents;
+  private final NodeRepository nodes;
   private final DesiredStateService desiredState;
   private final AuditService audit;
   private final Duration staleThreshold;
+  private final Duration nodeStaleThreshold;
 
   public LifecycleJobs(PortAllocationRepository allocations, PortRepository ports,
-                       TunnelRepository tunnels, AgentRepository agents,
+                       TunnelRepository tunnels, AgentRepository agents, NodeRepository nodes,
                        DesiredStateService desiredState, AuditService audit,
-                       @Value("${dtunnel.agent.stale-threshold:PT60S}") Duration staleThreshold) {
+                       @Value("${dtunnel.agent.stale-threshold:PT60S}") Duration staleThreshold,
+                       @Value("${dtunnel.node.stale-threshold:PT120S}") Duration nodeStaleThreshold) {
     this.allocations = allocations;
     this.ports = ports;
     this.tunnels = tunnels;
     this.agents = agents;
+    this.nodes = nodes;
     this.desiredState = desiredState;
     this.audit = audit;
     this.staleThreshold = staleThreshold;
+    this.nodeStaleThreshold = nodeStaleThreshold;
+  }
+
+  /**
+   * detail.md §10 (Node Agent, §1/§3.4): a node that has a node_token and has
+   * previously heartbeated but stops is marked OFFLINE. Nodes without an agent
+   * (node_token null, e.g. API-registered only) are left untouched.
+   */
+  @Scheduled(fixedDelay = 60_000, initialDelay = 45_000)
+  @SchedulerLock(name = "detectStaleNodes", lockAtLeastFor = "PT30S")
+  @Transactional
+  public void detectStaleNodes() {
+    Instant cutoff = Instant.now().minus(nodeStaleThreshold);
+    for (Node n : nodes.findAll()) {
+      if (n.getNodeToken() == null || n.getLastSeenAt() == null) continue;
+      if (n.getStatus() == NodeStatus.ONLINE && n.getLastSeenAt().isBefore(cutoff)) {
+        n.setStatus(NodeStatus.OFFLINE);
+        nodes.save(n);
+        audit.log("system", "SYSTEM", "node.stale_offline", "node", n.getId().toString(), "SUCCESS", null);
+        log.info("node {} marked OFFLINE (no heartbeat since {})", n.getCode(), n.getLastSeenAt());
+      }
+    }
   }
 
   /** 5-day warning window → mark tunnels EXPIRING (feeds UI warnings). */

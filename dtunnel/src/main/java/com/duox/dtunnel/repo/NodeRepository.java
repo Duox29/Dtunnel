@@ -7,4 +7,5 @@ import java.util.UUID;
 
 public interface NodeRepository extends JpaRepository<Node, UUID> {
   Optional<Node> findByCode(String code);
+  Optional<Node> findByNodeToken(String nodeToken);
 }

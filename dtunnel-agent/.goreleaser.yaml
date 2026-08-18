@@ -1,8 +1,8 @@
-# detail.md §3.4: cross-compiled release builds for the user agent.
-# Linux + Windows now; macOS when distribution effort allows.
+# detail.md §3.4: cross-compiled release builds for both agent binaries —
+# duox-agent (user side) and duox-node-agent (gateway side, §1/§16).
 version: 2
 
-project_name: duox-agent
+project_name: duox-agents
 
 builds:
   - id: duox-agent
@@ -15,6 +15,17 @@ builds:
     flags: [-trimpath]
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}}
+
+  - id: duox-node-agent
+    main: ./cmd/duox-node-agent
+    binary: duox-node-agent
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, windows, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
 
 archives:
   - id: default

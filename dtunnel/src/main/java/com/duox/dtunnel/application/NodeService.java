@@ -37,9 +37,26 @@ public class NodeService {
     n.setFrpsAdminUrl(frpsAdminUrl);
     if (capabilities != null && !capabilities.isEmpty()) n.setProtocolCapabilities(capabilities);
     n.setStatus(NodeStatus.ONLINE);
+    // Node Agent shared secret (§1/§3.4): generated once, shown to the admin at
+    // registration time, and presented by duox-node-agent on every heartbeat.
+    n.setNodeToken(java.util.UUID.randomUUID().toString().replace("-", ""));
     nodes.save(n);
     audit.log(actor, "ADMIN", "node.register", "node", n.getId().toString(), "SUCCESS", null);
     return n;
+  }
+
+  /**
+   * detail.md §1/§3.4: Node Agent heartbeat — authenticates by node_token,
+   * records health/capacity metrics into nodes.capacity_json, marks ONLINE.
+   */
+  @Transactional
+  public Node heartbeat(String token, java.util.Map<String, Object> metrics) {
+    Node n = nodes.findByNodeToken(token)
+        .orElseThrow(() -> ApiException.unauthorized("bad node token"));
+    n.setLastSeenAt(java.time.Instant.now());
+    if (n.getStatus() != NodeStatus.ONLINE) n.setStatus(NodeStatus.ONLINE);
+    if (metrics != null && !metrics.isEmpty()) n.setCapacityJson(metrics);
+    return nodes.save(n);
   }
 
   /**

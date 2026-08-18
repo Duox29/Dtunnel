@@ -419,5 +419,39 @@ class BusinessLoopIntegrationTest {
     assert days2.get(0).get("bytesIn").asLong() == today.get("bytesIn").asLong()
         : "aggregate must be idempotent (upsert, not accumulate)";
   }
+
+  @Test @Order(14)
+  void nodeAgentHeartbeatReportsCapacity() throws Exception {
+    // the node registered in Order 2 got a node_token at registration time
+    String nodeJson = doGet(adminCookie, "/api/v1/nodes/" + nodeId);
+    String nodeToken = json.readTree(nodeJson).get("nodeToken").asText();
+    assert nodeToken != null && !nodeToken.isBlank() : "node registration must issue a node token";
+
+    // 1) heartbeat with the node token succeeds and records metrics
+    MvcResult hb = mvc.perform(post("/node/v1/heartbeat")
+            .header("Authorization", "Bearer " + nodeToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("metrics", Map.of(
+                "hostname", "vn-01", "cpuCount", 4, "memTotalBytes", 8_000_000_000L,
+                "frpsProxies", 2, "frpsReachable", true)))))
+        .andExpect(status().isOk())
+        .andReturn();
+    JsonNode r = json.readTree(hb.getResponse().getContentAsString());
+    assert nodeId.equals(r.get("nodeId").asText());
+    assert "ONLINE".equals(r.get("status").asText());
+
+    // 2) metrics land in nodes.capacity_json and lastSeenAt is set
+    String after = doGet(adminCookie, "/api/v1/nodes/" + nodeId);
+    JsonNode n = json.readTree(after);
+    assert n.get("lastSeenAt") != null && !n.get("lastSeenAt").isNull() : "heartbeat must set lastSeenAt";
+    assert n.get("capacity").get("frpsProxies").asInt() == 2 : "capacity metrics must be persisted";
+
+    // 3) a bad token is rejected (device-credential auth, §15)
+    mvc.perform(post("/node/v1/heartbeat")
+            .header("Authorization", "Bearer not-a-real-token")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{}"))
+        .andExpect(status().isUnauthorized());
+  }
 }
 

@@ -34,7 +34,7 @@ public class SecurityConfig {
       // POSTs are already blocked by SameSite=Lax session cookies (§15) and
       // no cross-origin CORS is enabled, so the classic CSRF vector does not
       // apply; agents and the frps plugin carry their own credentials.
-      .csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/**", "/agent/v1/**", "/actuator/**", "/swagger-ui/**", "/v3/api-docs/**"))
+      .csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/**", "/agent/v1/**", "/node/v1/**", "/actuator/**", "/swagger-ui/**", "/v3/api-docs/**"))
       .authorizeHttpRequests(auth -> auth
         .requestMatchers("/api/v1/auth/**", "/actuator/health", "/actuator/info",
             // Prometheus scrape endpoint (Milestone 4.4): metrics only, no
@@ -42,6 +42,7 @@ public class SecurityConfig {
             "/actuator/prometheus",
             "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/error").permitAll()
         .requestMatchers("/agent/v1/register", "/agent/v1/frp-plugin").permitAll() // own auth inside
+        .requestMatchers("/node/v1/heartbeat").permitAll() // node_token auth inside (§1/§3.4)
         .requestMatchers("/agent/v1/**").authenticated()
         .requestMatchers("/api/v1/**").authenticated()
         .anyRequest().denyAll())

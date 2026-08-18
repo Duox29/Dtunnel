@@ -28,6 +28,14 @@ public class Node {
   @Column(name = "frps_admin_url")
   private String frpsAdminUrl;
 
+  /** Shared secret the Node Agent presents on heartbeat (§1/§3.4). */
+  @Column(name = "node_token")
+  private String nodeToken;
+
+  /** Last Node Agent heartbeat; stale nodes go OFFLINE (§10). */
+  @Column(name = "last_seen_at")
+  private java.time.Instant lastSeenAt;
+
   @JdbcTypeCode(SqlTypes.ARRAY)
   @Column(name = "protocol_capabilities", nullable = false)
   private List<String> protocolCapabilities = List.of("TCP", "UDP");
@@ -55,4 +63,8 @@ public class Node {
   public void setCapacityJson(Map<String, Object> capacityJson) { this.capacityJson = capacityJson; }
   public NodeStatus getStatus() { return status; }
   public void setStatus(NodeStatus status) { this.status = status; }
+  public String getNodeToken() { return nodeToken; }
+  public void setNodeToken(String nodeToken) { this.nodeToken = nodeToken; }
+  public java.time.Instant getLastSeenAt() { return lastSeenAt; }
+  public void setLastSeenAt(java.time.Instant lastSeenAt) { this.lastSeenAt = lastSeenAt; }
 }

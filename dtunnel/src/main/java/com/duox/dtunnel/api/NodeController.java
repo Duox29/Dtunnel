@@ -108,6 +108,11 @@ public class NodeController {
     m.put("protocolCapabilities", n.getProtocolCapabilities());
     m.put("frpsAdminUrl", n.getFrpsAdminUrl());
     m.put("status", n.getStatus().name());
+    // Node Agent (§1/§3.4): token shown to SUPERADMIN at registration;
+    // lastSeen + capacity come from duox-node-agent heartbeats.
+    m.put("nodeToken", n.getNodeToken());
+    m.put("lastSeenAt", n.getLastSeenAt() == null ? null : n.getLastSeenAt().toString());
+    m.put("capacity", n.getCapacityJson());
     return m;
   }
 }
