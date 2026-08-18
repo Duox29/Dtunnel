@@ -59,7 +59,8 @@ public class FrpPluginController {
 
   private Map<String, Object> deny(String reason) {
     log.info("frp-plugin deny: {}", reason);
-    return Map.of("reject", true, "rejectReason", reason, "unchange", true);
+    // frp's Response struct reads "reject_reason" (pkg/plugin/server/types.go)
+    return Map.of("reject", true, "reject_reason", reason, "unchange", true);
   }
 
   @PostMapping
@@ -76,7 +77,7 @@ public class FrpPluginController {
     if (req == null || req.op() == null || req.content() == null) return deny("malformed request");
     String op = req.op();
     Map<String, Object> c = req.content();
-    String userField = str(c.get("user"));
+    String userField = extractUserField(op, c);
 
     AgentIdentity ident = resolveIdentity(userField);
     if (ident == null) return deny("unresolvable agent identity");
@@ -87,7 +88,7 @@ public class FrpPluginController {
         ident.agent.setLastSeenAt(Instant.now());
         agents.save(ident.agent);
         audit.log(ident.agent.getId().toString(), "AGENT", "frp.login", "agent",
-            ident.agent.getId().toString(), "SUCCESS", Map.of("remote", str(c.get("remoteAddr"))));
+            ident.agent.getId().toString(), "SUCCESS", meta("remote", str(c.get("remote_addr"))));
         return allow();
       }
       case "NewProxy" -> {
@@ -160,6 +161,17 @@ public class FrpPluginController {
     }
   }
 
+  /**
+   * frp plugin protocol (pkg/plugin/server/types.go): Login carries the user
+   * as a flat string (msg.Login); NewProxy/Ping/CloseProxy wrap it in a
+   * UserInfo object {"user": ..., "metas": ..., "run_id": ...}.
+   */
+  private String extractUserField(String op, Map<String, Object> c) {
+    Object u = c.get("user");
+    if (u instanceof Map<?, ?> m) return str(m.get("user"));
+    return str(u);
+  }
+
   private record AgentIdentity(Agent agent) {}
 
   /** user field format: "<agentId>.<deviceToken>" */
@@ -181,4 +193,10 @@ public class FrpPluginController {
   }
 
   private String str(Object o) { return o == null ? null : String.valueOf(o); }
+
+  /** Map.of rejects nulls; audit metadata is optional by nature. */
+  private Map<String, Object> meta(String k, Object v) {
+    if (v == null) return Map.of();
+    return Map.of(k, v);
+  }
 }

@@ -208,13 +208,16 @@ class BusinessLoopIntegrationTest {
         .andReturn();
     assert !json.readTree(login.getResponse().getContentAsString()).get("reject").asBoolean();
 
-    // NewProxy for the allocated port is allowed
+    // NewProxy for the allocated port is allowed.
+    // Real frp protocol: NewProxy wraps identity in a UserInfo object
+    // (pkg/plugin/server/types.go), unlike Login's flat string.
+    Map<String, Object> userInfo = Map.of("user", userField, "metas", Map.of(), "run_id", "test-run");
     MvcResult np = mvc.perform(post("/agent/v1/frp-plugin")
             .contentType(MediaType.APPLICATION_JSON)
             .content(json.writeValueAsString(Map.of(
                 "version", "0.63.0", "op", "NewProxy",
                 "content", Map.of(
-                    "user", userField,
+                    "user", userInfo,
                     "proxy_name", userField + ".tunnel-" + tunnelId,
                     "proxy_type", "tcp",
                     "remote_port", 20005)))))
@@ -229,7 +232,7 @@ class BusinessLoopIntegrationTest {
             .content(json.writeValueAsString(Map.of(
                 "version", "0.63.0", "op", "NewProxy",
                 "content", Map.of(
-                    "user", userField,
+                    "user", userInfo,
                     "proxy_name", userField + ".tunnel-" + tunnelId,
                     "proxy_type", "tcp",
                     "remote_port", 20099)))))

@@ -39,7 +39,7 @@ services:
     ports: ["8080:8080"]
 
   frps-vn01:
-    image: fatedier/frps:latest
+    image: fatedier/frps:v0.71.0
     volumes: ["../frps/frps-vn01.toml:/etc/frp/frps.toml:ro"]
     command: ["-c", "/etc/frp/frps.toml"]
     depends_on: [control-plane]

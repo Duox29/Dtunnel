@@ -14,7 +14,7 @@ Update after every successful step; each entry maps to a git commit.
 | pom.xml: Spring Boot 4.1.0, Java 25, web/security/jpa/redis/validation/actuator/flyway/shedlock/springdoc/testcontainers | ✅ | |
 | Flyway V1__init.sql: full schema per §7 + shedlock table | ✅ | |
 | application.properties: virtual threads, Postgres, Redis sessions, cookie hardening, dtunnel.* knobs | ✅ | |
-| docker-compose up: Postgres + Redis + control-plane health | 🚧 | compose file written; E2E pending |
+| docker-compose up: Postgres + Redis + control-plane health | ✅ | verified via E2E run (compose.e2e variant + full stack file) |
 
 ## Milestone 1 — The One Business Loop (detail.md §14)
 
@@ -28,7 +28,7 @@ Update after every successful step; each entry maps to a git commit.
 | Agent API: /agent/v1 register, config/version, config, heartbeat | ✅ | |
 | FRP server-plugin webhook /agent/v1/frp-plugin (Login/NewProxy/Ping/CloseProxy, §9) | ✅ | identity via frpc user field `<agentId>.<token>`; token via query param (frps plugins can't send headers, verified frp 0.63) |
 | Go agent (identity Ed25519, REST transport, config sync, frpc adapter, heartbeat) | ✅ | dtunnel-agent/, builds clean |
-| E2E verify: register→approve→allocate→agent sync→frpc→ACTIVE | ⬜ | |
+| E2E verify: register→approve→allocate→agent sync→frpc→ACTIVE | ✅ | real frpc 0.71 ↔ frps container ↔ plugin webhook; `DTUNNEL-E2E-OK` received through :20005 |
 
 ## Milestone 2 — Lifecycle Hardening
 
@@ -39,9 +39,18 @@ Update after every successful step; each entry maps to a git commit.
 | Revocation propagation (§4) | ⬜ partial | status check per request already in AgentTokenFilter |
 | Audit logging on mutating actions (§15) | ✅ | AuditService wired into services |
 
-## Milestone 3+ — deferred
+## Milestone 3 — Multi-Tunnel, Multi-Node
 
-Multi-tunnel/multi-node, usage metering, QoS, web UI polish, rate limiting (Bucket4j), PLG stack, gRPC transport — not started.
+| Step | Status | Notes |
+|---|---|---|
+| Multiple tunnels per agent | ⬜ | desired-state already supports N proxies; needs test |
+| Second node + selection UX | ⬜ | |
+| Usage metering (usage_records) | ⬜ | |
+| QoS: bandwidthLimit + max connections | 🚧 partial | bandwidthLimit rendered in frpc.toml; enforcement untested |
+
+## Milestone 4+ — deferred
+
+Rate limiting (Bucket4j), full admin polish, PLG stack, gRPC transport — not started.
 
 ## Boot 4 modularization gotchas (hit during build)
 
@@ -64,3 +73,6 @@ Other environment fixes:
 - ShedLock 7.x / springdoc 3.x (Boot 4-compatible lines).
 - JDK installed at `~/.jdks/jdk-25.0.4+7` (no sudo for apt).
 - Git repo at ProjectDtunnel root covers `dtunnel/` and `dtunnel-agent/`.
+- frps image pinned to `fatedier/frps:v0.71.0` (no `latest` tag exists).
+- FRP plugin protocol (from frp source pkg/plugin/server/types.go): Login has flat `user` string; NewProxy/Ping/CloseProxy wrap identity in UserInfo object; response key is `reject_reason`.
+- Web: industrial-grade layout per §12 — features/ by domain (types+api+hooks+components), components/ui, routes/ with TanStack Router guards + TanStack Query, Tailwind v4.

@@ -1,0 +1,37 @@
+# E2E variant: infra only (control plane runs on the host for speed).
+# frps reaches the host control plane via host-gateway.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: tunnelplatform
+      POSTGRES_USER: tunnelplatform
+      POSTGRES_PASSWORD: change_me
+    ports: ["5432:5432"]
+    volumes: ["pgdata-e2e:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tunnelplatform"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  frps-vn01:
+    image: fatedier/frps:v0.71.0
+    volumes: ["../frps/frps-local.toml:/etc/frp/frps.toml:ro"]
+    command: ["-c", "/etc/frp/frps.toml"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports:
+      - "7000:7000"
+      - "20000-20100:20000-20100"
+
+volumes:
+  pgdata-e2e:

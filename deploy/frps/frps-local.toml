@@ -1,0 +1,13 @@
+# Local E2E variant of frps-vn01.toml: the control plane runs on the host,
+# so the plugin callback uses host.docker.internal (mapped via host-gateway).
+bindPort = 7000
+
+allowPorts = [
+  { start = 20000, end = 20100 }
+]
+
+[[httpPlugins]]
+  name = "duox-authz"
+  addr = "http://host.docker.internal:8080"
+  path = "/agent/v1/frp-plugin?token="
+  ops = ["Login", "NewProxy", "Ping", "CloseProxy"]
