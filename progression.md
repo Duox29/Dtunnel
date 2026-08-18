@@ -99,7 +99,8 @@ mounted config files must be world-readable (644), not the default 600.
 | Node Agent control plane | ✅ | V4 (node_token, last_seen_at); POST /node/v1/heartbeat (node_token bearer auth); token issued at registration + SUPERADMIN rotate endpoint; stale-node OFFLINE detection (120s); capacity/lastSeen in node JSON; Order 14 test (heartbeat + rotation) |
 | HTTP/HTTPS domain routing (§3.6) | ✅ | V5 (tunnel_type/domain/node_id + partial unique domain index + nodes.vhost_http_port); POST /api/v1/tunnels/http (domain normalize + uniqueness); desired-state http proxies; FRP plugin polices custom_domains vs registered domain; usage collector polls http proxies; Go agent renders customDomains; frps vhostHTTPPort=8081; Caddy edge container (:8090 → frps vhost); Order 15 test |
 | Frontend: HTTP tunnels | ✅ | dual-mode create form (Port TCP/UDP vs Domain HTTP), node picker by vhost port, HTTP type chip + domain endpoint in rows |
-| Live E2E verification | ✅ | e2e-web tunnel ACTIVE; frps http proxy online; **curl through Caddy :8090 with Host: demo.duox.local → 200 from local target**; node agent ONLINE reporting capacity (load/mem/frpsProxies); 16/16 tests green |
+| gRPC transport (§4 Phase 2) | ✅ | **push-config + sub-second revocation.** Shared proto `proto/duox/agent/v1/agent.proto` (Register unary + bidirectional Control stream: Hello/Heartbeat up, ConfigPush/Revoked/HeartbeatAck down). Java: grpc-java 1.65 server on `dtunnel.grpc.port` (default 9091, 0=ephemeral in tests), `GrpcPushService` stream registry, domain events (`DesiredStatePublished`/`AgentRevoked`) bridge publish/revoke → push; heartbeat logic extracted to shared `AgentChannelService` so REST+gRPC apply identical semantics. Go: `GRPCTransport` + runtime `grpcLoop` (reconnect/backoff, heartbeats over stream, REST heartbeat backs off while stream is up, REST poll stays as backstop); `--grpc` flag / `DUOX_GRPC` env. `GrpcChannelIntegrationTest` (3 tests): register-over-gRPC, pushed config after tunnel create, stream heartbeat ack, sub-second Revoked push. Live: both agents connected, config pushes observed in control-plane logs |
+| Live E2E verification | ✅ | e2e-web tunnel ACTIVE; frps http proxy online; **curl through Caddy :8090 with Host: demo.duox.local → 200 from local target**; node agent ONLINE reporting capacity (load/mem/frpsProxies); **20/20 tests green**; both agents on gRPC streams |
 
 **Node Agent design note (§16 resolved):** separate binary, not a mode flag —
 the gateway host runs frps and must not carry user-device credentials. Auth is
@@ -113,10 +114,9 @@ the TLS edge (auto_https off in local dev; production gets automatic certs).
 
 ## Milestone 5+ — deferred
 
-gRPC transport (push-config + sub-second revocation), billing/Stripe (deferred
-by product decision) — per §14, only after Milestones 1–4 are stable in
-production use. QoS max-connections remains blocked on frp (no per-proxy TCP
-connection limit).
+billing/Stripe (deferred by product decision) — per §14, only after Milestones
+1–4 are stable in production use. QoS max-connections remains blocked on frp
+(no per-proxy TCP connection limit). gRPC transport shipped in Phase 2 (above).
 
 ## Boot 4 modularization gotchas (hit during build)
 

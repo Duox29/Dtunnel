@@ -36,7 +36,10 @@ services:
       DTUNNEL_SUPERADMIN_EMAIL: admin@duox.local
       DTUNNEL_SUPERADMIN_PASSWORD: admin-change-me
       DTUNNEL_FRP_PLUGIN_TOKEN: ""
-    ports: ["8080:8080"]
+    ports:
+      - "8080:8080"
+      # detail.md §4 Phase 2: gRPC agent channel (push-config + sub-second revocation)
+      - "9091:9091"
 
   web:
     build: ../../web

@@ -19,7 +19,7 @@
 		<shedlock.version>7.8.0</shedlock.version>
 		<springdoc.version>3.1.0</springdoc.version>
 		<bucket4j.version>8.10.1</bucket4j.version>
-		<bucket4j.version>8.10.1</bucket4j.version>
+		<grpc.version>1.65.0</grpc.version>
 		<testcontainers.version>1.21.3</testcontainers.version>
 		<!-- Docker Engine 29 dropped API <1.44; docker-java defaults to 1.32 and
 		     Testcontainers pins it there unless api.version is set explicitly -->
@@ -119,6 +119,31 @@
 			<groupId>com.bucket4j</groupId>
 			<artifactId>bucket4j-redis</artifactId>
 			<version>${bucket4j.version}</version>
+		</dependency>
+
+		<!-- gRPC agent channel (spec §4 Phase 2): push-config + sub-second
+		     revocation. Stubs are generated from proto/duox/agent/v1/agent.proto
+		     (checked in; regenerate with protoc, see README). -->
+		<dependency>
+			<groupId>io.grpc</groupId>
+			<artifactId>grpc-netty-shaded</artifactId>
+			<version>${grpc.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.grpc</groupId>
+			<artifactId>grpc-protobuf</artifactId>
+			<version>${grpc.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.grpc</groupId>
+			<artifactId>grpc-stub</artifactId>
+			<version>${grpc.version}</version>
+		</dependency>
+		<!-- @Generated annotations in protoc-generated code -->
+		<dependency>
+			<groupId>javax.annotation</groupId>
+			<artifactId>javax.annotation-api</artifactId>
+			<version>1.3.2</version>
 		</dependency>
 
 		<dependency>

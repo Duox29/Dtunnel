@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * HTTP — register → login → node + port pool → resource request → approve →
  * agent register → tunnel create → agent config poll → heartbeat → ACTIVE.
  */
-@SpringBootTest
+@SpringBootTest(properties = "dtunnel.grpc.port=0")
 @AutoConfigureMockMvc
 @Testcontainers
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)

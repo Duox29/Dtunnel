@@ -14,16 +14,18 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/duox/dtunnel-agent/control"
 	"github.com/duox/dtunnel-agent/frp"
 )
 
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 type Options struct {
 	ServerURL      string
+	GrpcAddr       string // gRPC agent channel (detail.md §4 Phase 2); empty disables
 	Email          string // first-run registration only
 	Password       string // first-run registration only
 	FrpcPath       string
@@ -47,6 +49,10 @@ type Runtime struct {
 	mu      sync.Mutex
 	current *control.DesiredState
 	frpcCmd *exec.Cmd
+
+	// grpcActive is true while a gRPC Control stream is connected; the REST
+	// heartbeat backs off so liveness isn't double-reported (§4 Phase 2).
+	grpcActive atomic.Bool
 }
 
 func New(opts Options, log *slog.Logger) *Runtime {
@@ -116,6 +122,13 @@ func (r *Runtime) Run(ctx context.Context) error {
 	// initial sync
 	r.syncIfChanged(ctx, &st)
 
+	// detail.md §4 Phase 2: gRPC Control stream for push-config + sub-second
+	// revocation. Runs alongside the REST loop, which stays as the backstop
+	// (and takes over fully whenever the stream is down).
+	if r.opts.GrpcAddr != "" {
+		go r.grpcLoop(ctx, &st)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -126,6 +139,84 @@ func (r *Runtime) Run(ctx context.Context) error {
 		case <-heartbeat.C:
 			r.heartbeat(ctx, &st)
 		}
+	}
+}
+
+// grpcLoop maintains the gRPC Control stream (reconnecting with backoff).
+// While connected it carries heartbeats and applies pushed config/revocation
+// immediately; the REST poll loop keeps running as a consistency backstop.
+func (r *Runtime) grpcLoop(ctx context.Context, st *state) {
+	backoff := 5 * time.Second
+	for ctx.Err() == nil {
+		gt, err := control.NewGRPCTransport(r.opts.GrpcAddr)
+		if err != nil {
+			r.log.Warn("grpc dial failed", "addr", r.opts.GrpcAddr, "err", err)
+			sleepCtx(ctx, backoff)
+			continue
+		}
+		r.mu.Lock()
+		applied := st.AppliedVersion
+		token := st.Token
+		r.mu.Unlock()
+		cs, err := gt.OpenControl(ctx, token, Version, applied)
+		if err != nil {
+			r.log.Warn("grpc control stream open failed", "err", err)
+			gt.Close()
+			sleepCtx(ctx, backoff)
+			continue
+		}
+		r.grpcActive.Store(true)
+		r.log.Info("grpc control stream connected", "addr", r.opts.GrpcAddr)
+
+		hb := time.NewTicker(r.opts.HeartbeatEvery)
+	streamLoop:
+		for ctx.Err() == nil {
+			select {
+			case <-ctx.Done():
+				break streamLoop
+			case ev := <-cs.Events():
+				switch {
+				case ev.Revoked:
+					// sub-second revocation (§4): stop serving immediately.
+					r.log.Error("agent revoked via gRPC push; stopping tunnels")
+					r.applyDesired(ctx, st, &control.DesiredState{})
+				case ev.Config != nil:
+					ev.Config.Payload.AgentID = st.AgentID
+					r.applyDesired(ctx, st, ev.Config)
+				case ev.AckVersion >= 0:
+					r.mu.Lock()
+					appliedNow := st.AppliedVersion
+					r.mu.Unlock()
+					if ev.AckVersion != appliedNow {
+						r.syncIfChanged(ctx, st)
+					}
+				}
+			case <-hb.C:
+				r.mu.Lock()
+				appliedNow := st.AppliedVersion
+				r.mu.Unlock()
+				if err := cs.SendHeartbeat(appliedNow, Version, r.tunnelReports()); err != nil {
+					r.log.Warn("grpc heartbeat send failed", "err", err)
+					break streamLoop
+				}
+			case err := <-cs.Err():
+				r.log.Warn("grpc control stream lost", "err", err)
+				break streamLoop
+			}
+		}
+		hb.Stop()
+		r.grpcActive.Store(false)
+		gt.Close()
+		sleepCtx(ctx, backoff)
+	}
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
 	}
 }
 
@@ -196,8 +287,10 @@ func (r *Runtime) applyDesired(ctx context.Context, st *state, desired *control.
 		r.log.Info("no desired proxies; frpc stopped")
 	}
 
+	r.mu.Lock()
 	st.AppliedVersion = desired.Version
 	r.saveState(*st)
+	r.mu.Unlock()
 }
 
 func (r *Runtime) stopFrpc() {
@@ -211,7 +304,8 @@ func (r *Runtime) stopFrpc() {
 	}
 }
 
-func (r *Runtime) heartbeat(ctx context.Context, st *state) {
+// tunnelReports builds the observed per-tunnel state for heartbeats.
+func (r *Runtime) tunnelReports() []control.TunnelReport {
 	r.mu.Lock()
 	current := r.current
 	cmd := r.frpcCmd
@@ -228,7 +322,17 @@ func (r *Runtime) heartbeat(ctx context.Context, st *state) {
 			reports = append(reports, control.TunnelReport{TunnelID: p.TunnelID, Status: status})
 		}
 	}
-	desiredVersion, err := r.rest.Heartbeat(ctx, st.AppliedVersion, Version, reports)
+	return reports
+}
+
+func (r *Runtime) heartbeat(ctx context.Context, st *state) {
+	// While a gRPC Control stream is carrying heartbeats, skip the REST one so
+	// liveness isn't double-reported (§4 Phase 2). REST resumes automatically
+	// the moment the stream drops (grpcActive flips false).
+	if r.grpcActive.Load() {
+		return
+	}
+	desiredVersion, err := r.rest.Heartbeat(ctx, st.AppliedVersion, Version, r.tunnelReports())
 	if err != nil {
 		r.log.Warn("heartbeat failed", "err", err)
 		return

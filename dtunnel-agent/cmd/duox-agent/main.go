@@ -18,6 +18,7 @@ import (
 
 func main() {
 	serverURL := flag.String("server", envOr("DUOX_SERVER", "http://localhost:8080"), "control plane base URL")
+	grpcAddr := flag.String("grpc", envOr("DUOX_GRPC", ""), "gRPC agent channel addr (detail.md §4 Phase 2); empty = REST only")
 	email := flag.String("email", "", "account email (first-run registration)")
 	password := flag.String("password", "", "account password (first-run registration)")
 	frpcPath := flag.String("frpc", envOr("DUOX_FRPC", "frpc"), "path to frpc executable")
@@ -32,6 +33,7 @@ func main() {
 
 	rt := runtime.New(runtime.Options{
 		ServerURL:      *serverURL,
+		GrpcAddr:       *grpcAddr,
 		Email:          *email,
 		Password:       *password,
 		FrpcPath:       *frpcPath,

@@ -106,7 +106,7 @@ to surefire (property `docker.api.version`).
   the httpPlugins callback does all authorization.
 - **Cluster-safe jobs** (§10): `@Scheduled` + ShedLock (expiration warnings →
   expiry → 3-day grace → release; stale-agent detection at 60s; stale-node at 120s).
-- **Transport interface** (§4): REST now, gRPC later — swap touches one Go package.
+- **Transport interface** (§4): REST + gRPC. The gRPC agent channel (`dtunnel.grpc.port`, default **9091**) carries push-config and sub-second revocation over one bidirectional Control stream; REST polling stays as the backstop. Enable on the agent with `--grpc host:9091` (or `DUOX_GRPC`). Proto source of truth: `proto/duox/agent/v1/agent.proto` (stubs checked in; regenerate with protoc).
 - **Node Agent** (§1/§16): separate `duox-node-agent` binary with per-node
   shared-secret auth — the gateway host never carries user device credentials.
 - **HTTP/HTTPS edge** (§3.6): Caddy → frps vhost; domain claims are re-authorized
@@ -118,3 +118,29 @@ to surefire (property `docker.api.version`).
 - frps/frpc pinned to **v0.71.0** (no `latest` tag on Docker Hub).
 - frps server plugins cannot send custom headers → the plugin shared secret
   travels as `?token=` on the plugin path (set `DTUNNEL_FRP_PLUGIN_TOKEN`).
+
+## Regenerating gRPC stubs
+
+The proto is the source of truth at `proto/duox/agent/v1/agent.proto`. Generated
+stubs are checked in (`dtunnel-agent/control/pb/*.go` and
+`dtunnel/src/main/java/com/duox/dtunnel/grpc/pb/*.java`). Regenerate after
+editing the proto:
+
+```bash
+# Go
+protoc --proto_path=proto \
+  --go_out=paths=source_relative:dtunnel-agent/control/pb \
+  --go-grpc_out=paths=source_relative:dtunnel-agent/control/pb \
+  proto/duox/agent/v1/agent.proto
+# (protoc nests output under duox/agent/v1 — flatten the *.go files into control/pb)
+
+# Java (needs the protoc-gen-grpc-java plugin binary)
+protoc --proto_path=proto \
+  --java_out=dtunnel/src/main/java \
+  --plugin=protoc-gen-grpc-java=/path/to/protoc-gen-grpc-java \
+  --grpc-java_out=dtunnel/src/main/java \
+  proto/duox/agent/v1/agent.proto
+```
+
+Toolchain pinned: protoc 27.2, protoc-gen-go v1.34.2, protoc-gen-go-grpc v1.4.0,
+protoc-gen-grpc-java 1.65.0 (matches grpc-java 1.65.0 in `dtunnel/pom.xml`).

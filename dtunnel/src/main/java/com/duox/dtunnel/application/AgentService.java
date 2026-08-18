@@ -19,10 +19,13 @@ public class AgentService {
 
   private final AgentRepository agents;
   private final AuditService audit;
+  private final org.springframework.context.ApplicationEventPublisher events;
 
-  public AgentService(AgentRepository agents, AuditService audit) {
+  public AgentService(AgentRepository agents, AuditService audit,
+                      org.springframework.context.ApplicationEventPublisher events) {
     this.agents = agents;
     this.audit = audit;
+    this.events = events;
   }
 
   @Transactional
@@ -60,6 +63,9 @@ public class AgentService {
     a.setStatus(AgentStatus.REVOKED);
     agents.save(a);
     audit.log(adminId.toString(), "ADMIN", "agent.revoke", "agent", a.getId().toString(), "SUCCESS", null);
+    // §4 Phase 2: sub-second revocation — push over the open gRPC stream now;
+    // REST agents still catch it on their next poll (bounded by heartbeat).
+    events.publishEvent(new AgentEvents.AgentRevoked(agentId));
     return a;
   }
 }

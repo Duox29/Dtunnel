@@ -20,15 +20,18 @@ public class DesiredStateService {
   private final PortRepository ports;
   private final NodeRepository nodes;
   private final ConfigurationVersionRepository versions;
+  private final org.springframework.context.ApplicationEventPublisher events;
 
   public DesiredStateService(TunnelRepository tunnels, PortAllocationRepository allocations,
                              PortRepository ports, NodeRepository nodes,
-                             ConfigurationVersionRepository versions) {
+                             ConfigurationVersionRepository versions,
+                             org.springframework.context.ApplicationEventPublisher events) {
     this.tunnels = tunnels;
     this.allocations = allocations;
     this.ports = ports;
     this.nodes = nodes;
     this.versions = versions;
+    this.events = events;
   }
 
   /** Tunnels that should be running on the agent right now. */
@@ -133,6 +136,9 @@ public class DesiredStateService {
     cv.setVersion(latest + 1);
     cv.setPayload(payload);
     versions.save(cv);
+    // §4 Phase 2: notify the gRPC push adapter so connected agents converge
+    // immediately instead of waiting for their next REST poll.
+    events.publishEvent(new AgentEvents.DesiredStatePublished(agentId, latest + 1));
     return latest + 1;
   }
 }

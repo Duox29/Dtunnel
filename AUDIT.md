@@ -51,8 +51,16 @@ issued at registration, rotatable by SUPERADMIN; stale nodes go OFFLINE
 
 ## §4 — Agent channel
 ✅ REST + 15s heartbeat; revocation bounded to one round-trip (AgentTokenFilter
-checks REVOKED on every request) — verified by Order 12 test. gRPC is the
-documented Phase-2 transport swap.
+checks REVOKED on every request) — verified by Order 12 test.
+✅ **gRPC transport shipped (Phase 2):** grpc-java 1.65 server on
+`dtunnel.grpc.port` (default 9091). Bidirectional Control stream pushes
+ConfigPush on every desired-state publish and Revoked immediately on revoke
+(domain events → `GrpcPushService`); heartbeats share `AgentChannelService`
+with REST so both transports apply identical semantics. Go agent runs a
+reconnecting `grpcLoop` (`--grpc` flag); REST poll remains the backstop.
+Verified by `GrpcChannelIntegrationTest` (register-over-gRPC, pushed config,
+stream heartbeat ack, sub-second Revoked push) and live: both agents connected
+with config pushes in control-plane logs.
 
 ## §5 — Port allocation
 ✅ `SELECT ... FOR UPDATE SKIP LOCKED` with candidate list + partial unique

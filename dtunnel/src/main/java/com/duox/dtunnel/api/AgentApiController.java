@@ -55,10 +55,12 @@ public class AgentApiController {
   private final DesiredStateService desiredState;
   private final TunnelRepository tunnels;
   private final AuditService audit;
+  private final com.duox.dtunnel.application.AgentChannelService channel;
 
   public AgentApiController(UserRepository users, PasswordEncoder encoder, AgentService agentService,
                             AgentRepository agents, AgentTokenService tokens,
-                            DesiredStateService desiredState, TunnelRepository tunnels, AuditService audit) {
+                            DesiredStateService desiredState, TunnelRepository tunnels, AuditService audit,
+                            com.duox.dtunnel.application.AgentChannelService channel) {
     this.users = users;
     this.encoder = encoder;
     this.agentService = agentService;
@@ -67,6 +69,7 @@ public class AgentApiController {
     this.desiredState = desiredState;
     this.tunnels = tunnels;
     this.audit = audit;
+    this.channel = channel;
   }
 
   /** detail.md §6: first-run registration binds the device public key to a user account. */
@@ -108,53 +111,20 @@ public class AgentApiController {
    * STOPPING→STOPPED when it reports the tunnel down.
    */
   @PostMapping("/heartbeat")
-  @Transactional
   public Map<String, Object> heartbeat(@AuthenticationPrincipal Principal principal,
                                        @RequestBody(required = false) HeartbeatRequest req) {
     AgentPrincipal agentP = (AgentPrincipal) principal;
-    Agent a = agents.findById(agentP.agentId()).orElseThrow();
-    a.setLastSeenAt(Instant.now());
-    // A valid device token proves the approved device is alive again: restore
-    // OFFLINE → ONLINE (stale detection, §10, is liveness-only). REVOKED never
-    // reaches here — the token filter rejects it on every request (§4, §15).
-    if (a.getStatus() == AgentStatus.OFFLINE) a.setStatus(AgentStatus.ONLINE);
-    if (req != null && req.agentVersion() != null) a.setAgentVersion(req.agentVersion());
-    agents.save(a);
-
-    if (req != null && req.tunnels() != null) {
-      for (TunnelReport r : req.tunnels()) {
-        UUID tid;
-        try { tid = UUID.fromString(r.tunnelId()); } catch (RuntimeException e) { continue; }
-        Tunnel t = tunnels.findById(tid).orElse(null);
-        if (t == null || !t.getAgentId().equals(a.getId())) continue;
-        String s = r.status() == null ? "" : r.status().toUpperCase();
-        switch (s) {
-          case "RUNNING", "ACTIVE" -> {
-            if (t.getStatus() == TunnelStatus.STARTING || t.getStatus() == TunnelStatus.CONFIGURED) {
-              t.setStatus(TunnelStatus.ACTIVE);
-              tunnels.save(t);
-              audit.log(a.getId().toString(), "AGENT", "tunnel.active", "tunnel", tid.toString(), "SUCCESS", null);
-            }
-          }
-          case "STOPPED" -> {
-            if (t.getStatus() == TunnelStatus.STOPPING) {
-              t.setStatus(TunnelStatus.STOPPED);
-              tunnels.save(t);
-              audit.log(a.getId().toString(), "AGENT", "tunnel.stopped", "tunnel", tid.toString(), "SUCCESS", null);
-            }
-          }
-          case "ERROR" -> {
-            if (t.getStatus() != TunnelStatus.ERROR) {
-              t.setStatus(TunnelStatus.ERROR);
-              tunnels.save(t);
-              audit.log(a.getId().toString(), "AGENT", "tunnel.error", "tunnel", tid.toString(), "SUCCESS", null);
-            }
-          }
-          default -> { }
-        }
-      }
-    }
-    return Map.of("desiredVersion", desiredState.currentVersion(a.getId()),
-        "serverTime", Instant.now().toString());
+    // Shared with the gRPC channel (§4): identical liveness + reconciliation
+    // semantics regardless of transport.
+    List<com.duox.dtunnel.application.AgentChannelService.TunnelReport> reports =
+        req == null || req.tunnels() == null ? null
+            : req.tunnels().stream()
+                .map(r -> new com.duox.dtunnel.application.AgentChannelService.TunnelReport(r.tunnelId(), r.status()))
+                .toList();
+    int desiredVersion = channel.heartbeat(agentP.agentId(),
+        req == null ? null : req.appliedVersion(),
+        req == null ? null : req.agentVersion(),
+        reports);
+    return Map.of("desiredVersion", desiredVersion, "serverTime", Instant.now().toString());
   }
 }

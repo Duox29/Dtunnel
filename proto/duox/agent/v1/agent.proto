@@ -1,0 +1,104 @@
+// detail.md §4: agent <-> control-plane channel. REST is the MVP transport;
+// this gRPC service is the Phase-2 swap (push-config + sub-second revocation).
+// It is deliberately narrow: registration stays unary, and the steady-state
+// channel is ONE bidirectional stream carrying desired-state pushes,
+// revocation signals, and agent heartbeats.
+syntax = "proto3";
+
+package duox.agent.v1;
+
+option go_package = "github.com/duox/dtunnel-agent/control/pb;pb";
+option java_multiple_files = true;
+option java_package = "com.duox.dtunnel.grpc.pb";
+option java_outer_classname = "AgentProto";
+
+service AgentService {
+  // First-run device registration (detail.md §6). Unary, mirrors the REST
+  // /agent/v1/register contract.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // Steady-state control stream. The agent opens it once (authenticated by its
+  // device token in the Hello message) and keeps it open:
+  //   server -> agent: ConfigPush on every desired-state version bump,
+  //                    Revoked the instant an admin revokes the device,
+  //                    HeartbeatAck for each heartbeat;
+  //   agent  -> server: Hello (handshake), then periodic Heartbeat.
+  // This is what bounds revocation latency to milliseconds instead of the
+  // heartbeat interval (detail.md §4).
+  rpc Control(stream AgentMessage) returns (stream ServerMessage);
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string public_key = 3;
+  string platform = 4;
+  string agent_version = 5;
+}
+
+message RegisterResponse {
+  string agent_id = 1;
+  string token = 2;
+  string status = 3;
+}
+
+// Agent -> server on the Control stream.
+message AgentMessage {
+  oneof kind {
+    Hello hello = 1;
+    Heartbeat heartbeat = 2;
+  }
+}
+
+// First message on the stream: identifies + authenticates the agent.
+message Hello {
+  string token = 1;
+  string agent_version = 2;
+  int32 applied_version = 3;
+}
+
+message Heartbeat {
+  int32 applied_version = 1;
+  string agent_version = 2;
+  repeated TunnelReport tunnels = 3;
+}
+
+message TunnelReport {
+  string tunnel_id = 1;
+  string status = 2; // RUNNING | STOPPED | ERROR
+}
+
+// Server -> agent on the Control stream.
+message ServerMessage {
+  oneof kind {
+    ConfigPush config = 1;
+    Revoked revoked = 2;
+    HeartbeatAck ack = 3;
+  }
+}
+
+message ConfigPush {
+  int32 version = 1;
+  repeated Proxy proxies = 2;
+}
+
+message Proxy {
+  string tunnel_id = 1;
+  string name = 2;
+  string type = 3; // tcp | udp | http
+  string server_addr = 4;
+  int32 server_port = 5;
+  int32 remote_port = 6;
+  string domain = 7; // http only (detail.md §3.6)
+  string local_host = 8;
+  int32 local_port = 9;
+  int32 bandwidth_limit_mbps = 10;
+}
+
+message Revoked {
+  string reason = 1;
+}
+
+message HeartbeatAck {
+  int32 desired_version = 1;
+}
