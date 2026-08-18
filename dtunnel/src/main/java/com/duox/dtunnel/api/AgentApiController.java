@@ -114,6 +114,10 @@ public class AgentApiController {
     AgentPrincipal agentP = (AgentPrincipal) principal;
     Agent a = agents.findById(agentP.agentId()).orElseThrow();
     a.setLastSeenAt(Instant.now());
+    // A valid device token proves the approved device is alive again: restore
+    // OFFLINE → ONLINE (stale detection, §10, is liveness-only). REVOKED never
+    // reaches here — the token filter rejects it on every request (§4, §15).
+    if (a.getStatus() == AgentStatus.OFFLINE) a.setStatus(AgentStatus.ONLINE);
     if (req != null && req.agentVersion() != null) a.setAgentVersion(req.agentVersion());
     agents.save(a);
 

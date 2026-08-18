@@ -483,6 +483,8 @@ class BusinessLoopIntegrationTest {
     JsonNode r = json.readTree(reg);
     String httpAgentId = r.get("agentId").asText();
     String httpAgentToken = r.get("token").asText();
+    httpAgentId2 = httpAgentId;
+    httpAgentToken2 = httpAgentToken;
     doPost(adminCookie, "/api/v1/agents/" + httpAgentId + "/approve", null);
 
     // 1) the node gets a shared vhost HTTP port (§3.6)
@@ -557,5 +559,32 @@ class BusinessLoopIntegrationTest {
     assert json.readTree(bad.getResponse().getContentAsString()).get("reject").asBoolean()
         : "wrong-domain NewProxy must be denied";
   }
+
+  @Test @Order(16)
+  void heartbeatRestoresOfflineAgentToOnline() throws Exception {
+    // stale detection (§10) is liveness-only: a valid device token proves the
+    // approved device is alive, so the next heartbeat must restore ONLINE.
+    var agentRepo = context.getBean(com.duox.dtunnel.repo.AgentRepository.class);
+    var agent = agentRepo.findById(java.util.UUID.fromString(httpAgentIdStatic())).orElseThrow();
+    agent.setStatus(com.duox.dtunnel.domain.AgentStatus.OFFLINE);
+    agentRepo.save(agent);
+
+    mvc.perform(post("/agent/v1/heartbeat")
+            .header("Authorization", "Bearer " + httpAgentTokenStatic())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of(
+                "appliedVersion", 1, "agentVersion", "0.2.0", "tunnels", List.of()))))
+        .andExpect(status().isOk());
+
+    var after = agentRepo.findById(java.util.UUID.fromString(httpAgentIdStatic())).orElseThrow();
+    assert after.getStatus() == com.duox.dtunnel.domain.AgentStatus.ONLINE
+        : "heartbeat with a valid token must restore OFFLINE -> ONLINE";
+  }
+
+  // Order 15's locals, exposed for Order 16 (JUnit runs orders sequentially).
+  static String httpAgentId2;
+  static String httpAgentToken2;
+  static String httpAgentIdStatic() { return httpAgentId2; }
+  static String httpAgentTokenStatic() { return httpAgentToken2; }
 }
 
