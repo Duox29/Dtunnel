@@ -38,6 +38,11 @@ services:
       DTUNNEL_FRP_PLUGIN_TOKEN: ""
     ports: ["8080:8080"]
 
+  web:
+    build: ../../web
+    depends_on: [control-plane]
+    ports: ["3000:80"]
+
   frps-vn01:
     image: fatedier/frps:v0.71.0
     volumes: ["../frps/frps-vn01.toml:/etc/frp/frps.toml:ro"]
