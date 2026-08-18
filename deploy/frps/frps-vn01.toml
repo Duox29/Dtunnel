@@ -2,6 +2,11 @@
 # Per-tunnel authorization happens via the httpPlugins callback, not here.
 bindPort = 7000
 
+# detail.md §3.6: shared vhost port for domain-routed HTTP tunnels. Caddy
+# (the edge) forwards :80/:443 traffic here; frps routes by Host header and
+# the server plugin authorizes each proxy's claimed domain.
+vhostHTTPPort = 8081
+
 # Admin API — the control plane polls this for per-proxy traffic counters
 # (usage metering, detail.md Milestone 3.3).
 webServer.addr = "0.0.0.0"

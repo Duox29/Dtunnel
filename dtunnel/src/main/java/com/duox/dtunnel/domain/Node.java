@@ -36,6 +36,10 @@ public class Node {
   @Column(name = "last_seen_at")
   private java.time.Instant lastSeenAt;
 
+  /** Shared frps vhost HTTP port for domain-routed tunnels (§3.6). */
+  @Column(name = "vhost_http_port")
+  private Integer vhostHttpPort;
+
   @JdbcTypeCode(SqlTypes.ARRAY)
   @Column(name = "protocol_capabilities", nullable = false)
   private List<String> protocolCapabilities = List.of("TCP", "UDP");
@@ -67,4 +71,6 @@ public class Node {
   public void setNodeToken(String nodeToken) { this.nodeToken = nodeToken; }
   public java.time.Instant getLastSeenAt() { return lastSeenAt; }
   public void setLastSeenAt(java.time.Instant lastSeenAt) { this.lastSeenAt = lastSeenAt; }
+  public Integer getVhostHttpPort() { return vhostHttpPort; }
+  public void setVhostHttpPort(Integer vhostHttpPort) { this.vhostHttpPort = vhostHttpPort; }
 }

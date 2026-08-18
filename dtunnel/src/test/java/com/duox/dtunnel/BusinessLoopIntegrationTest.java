@@ -453,5 +453,89 @@ class BusinessLoopIntegrationTest {
             .content("{}"))
         .andExpect(status().isUnauthorized());
   }
+
+  @Test @Order(15)
+  void httpTunnelIsDomainRoutedAndPolicedByPlugin() throws Exception {
+    // Order 12 revoked the first agent, so the HTTP flow uses a fresh device.
+    String reg = doPost(null, "/agent/v1/register",
+        Map.of("email", "user@example.com", "password", "password123",
+               "publicKey", "dGVzdC1kZXZpY2Uta2V5LTI=", "platform", "linux", "agentVersion", "0.2.0"));
+    JsonNode r = json.readTree(reg);
+    String httpAgentId = r.get("agentId").asText();
+    String httpAgentToken = r.get("token").asText();
+    doPost(adminCookie, "/api/v1/agents/" + httpAgentId + "/approve", null);
+
+    // 1) the node gets a shared vhost HTTP port (§3.6)
+    MvcResult patch = mvc.perform(patch("/api/v1/nodes/" + nodeId)
+            .cookie(sessionCookie(adminCookie))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("vhostHttpPort", 8081))))
+        .andExpect(status().isOk())
+        .andReturn();
+    assert json.readTree(patch.getResponse().getContentAsString()).get("vhostHttpPort").asInt() == 8081;
+
+    // 2) user creates a domain-routed HTTP tunnel (no port allocation)
+    String t = doPost(userCookie, "/api/v1/tunnels/http",
+        Map.of("nodeId", nodeId, "agentId", httpAgentId, "name", "web",
+               "domain", "App.Example.COM", "targetHost", "127.0.0.1", "targetPort", 8000));
+    JsonNode tj = json.readTree(t);
+    String httpTunnelId = tj.get("id").asText();
+    assert "HTTP".equals(tj.get("type").asText());
+    assert "app.example.com".equals(tj.get("domain").asText()) : "domain must be normalized to lowercase";
+    assert tj.get("allocationId").isNull() : "HTTP tunnels carry no port allocation";
+
+    // duplicate domain is rejected platform-wide
+    MvcResult dup = mvc.perform(post("/api/v1/tunnels/http")
+            .cookie(sessionCookie(userCookie))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("nodeId", nodeId, "agentId", httpAgentId,
+                "name", "web2", "domain", "app.example.com", "targetHost", "127.0.0.1", "targetPort", 8001))))
+        .andExpect(status().isConflict())
+        .andReturn();
+    assert dup.getResponse().getContentAsString().contains("already in use");
+
+    // 3) agent config poll delivers the http proxy with its domain
+    MvcResult cfgRes = mvc.perform(get("/agent/v1/config")
+            .header("Authorization", "Bearer " + httpAgentToken))
+        .andExpect(status().isOk())
+        .andReturn();
+    JsonNode proxies = json.readTree(cfgRes.getResponse().getContentAsString()).get("payload").get("proxies");
+    JsonNode hp = null;
+    for (JsonNode p : proxies) if (p.get("tunnelId").asText().equals(httpTunnelId)) hp = p;
+    assert hp != null : "http tunnel must appear in desired state";
+    assert "http".equals(hp.get("type").asText());
+    assert "app.example.com".equals(hp.get("domain").asText());
+
+    // 4) FRP plugin allows NewProxy when custom_domains matches the tunnel domain
+    String userField = httpAgentId + "." + httpAgentToken;
+    MvcResult ok = mvc.perform(post("/agent/v1/frp-plugin")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of(
+                "version", "0.71.0", "op", "NewProxy",
+                "content", Map.of(
+                    "user", Map.of("user", userField, "metas", Map.of(), "run_id", "http-run"),
+                    "proxy_name", userField + ".tunnel-" + httpTunnelId,
+                    "proxy_type", "http",
+                    "custom_domains", List.of("app.example.com"))))))
+        .andExpect(status().isOk())
+        .andReturn();
+    assert !json.readTree(ok.getResponse().getContentAsString()).get("reject").asBoolean()
+        : "matching-domain NewProxy must be allowed";
+
+    // 5) claiming a different domain is denied (§9: server-side authorization)
+    MvcResult bad = mvc.perform(post("/agent/v1/frp-plugin")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of(
+                "version", "0.71.0", "op", "NewProxy",
+                "content", Map.of(
+                    "user", Map.of("user", userField, "metas", Map.of(), "run_id", "http-run"),
+                    "proxy_name", userField + ".tunnel-" + httpTunnelId,
+                    "proxy_type", "http",
+                    "custom_domains", List.of("evil.example.com"))))))
+        .andExpect(status().isOk())
+        .andReturn();
+    assert json.readTree(bad.getResponse().getContentAsString()).get("reject").asBoolean()
+        : "wrong-domain NewProxy must be denied";
+  }
 }
 

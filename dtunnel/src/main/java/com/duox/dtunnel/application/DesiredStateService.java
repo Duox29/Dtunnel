@@ -65,29 +65,58 @@ public class DesiredStateService {
   public Map<String, Object> buildPayload(UUID agentId) {
     List<Map<String, Object>> proxies = new ArrayList<>();
     for (Tunnel t : desiredTunnels(agentId)) {
-      PortAllocation alloc = allocations.findById(t.getPortAllocationId()).orElse(null);
-      if (alloc == null) continue;
-      Port port = ports.findById(alloc.getPortId()).orElse(null);
-      if (port == null) continue;
-      Node node = nodes.findById(port.getNodeId()).orElse(null);
-      if (node == null) continue;
-
-      Map<String, Object> proxy = new LinkedHashMap<>();
-      proxy.put("tunnelId", t.getId().toString());
-      proxy.put("name", "tunnel-" + t.getId());
-      proxy.put("type", port.getProtocol().toLowerCase()); // tcp | udp
-      proxy.put("serverAddr", node.getPublicAddress());
-      proxy.put("serverPort", 7000); // frps bindPort, detail.md §9
-      proxy.put("remotePort", port.getPortNumber());
-      proxy.put("localHost", t.getTargetHost());
-      proxy.put("localPort", t.getTargetPort());
-      if (t.getBandwidthLimitMbps() != null) proxy.put("bandwidthLimitMbps", t.getBandwidthLimitMbps());
-      proxies.add(proxy);
+      if ("HTTP".equals(t.getTunnelType())) {
+        proxies.add(httpProxy(t));
+      } else {
+        Map<String, Object> p = portProxy(t);
+        if (p != null) proxies.add(p);
+      }
     }
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("agentId", agentId.toString());
     payload.put("proxies", proxies);
     return payload;
+  }
+
+  /** PORT tunnel (tcp/udp): dedicated allocated port on the node. */
+  private Map<String, Object> portProxy(Tunnel t) {
+    if (t.getPortAllocationId() == null) return null;
+    PortAllocation alloc = allocations.findById(t.getPortAllocationId()).orElse(null);
+    if (alloc == null) return null;
+    Port port = ports.findById(alloc.getPortId()).orElse(null);
+    if (port == null) return null;
+    Node node = nodes.findById(port.getNodeId()).orElse(null);
+    if (node == null) return null;
+
+    Map<String, Object> proxy = new LinkedHashMap<>();
+    proxy.put("tunnelId", t.getId().toString());
+    proxy.put("name", "tunnel-" + t.getId());
+    proxy.put("type", port.getProtocol().toLowerCase()); // tcp | udp
+    proxy.put("serverAddr", node.getPublicAddress());
+    proxy.put("serverPort", 7000); // frps bindPort, detail.md §9
+    proxy.put("remotePort", port.getPortNumber());
+    proxy.put("localHost", t.getTargetHost());
+    proxy.put("localPort", t.getTargetPort());
+    if (t.getBandwidthLimitMbps() != null) proxy.put("bandwidthLimitMbps", t.getBandwidthLimitMbps());
+    return proxy;
+  }
+
+  /** HTTP tunnel (§3.6): domain-routed over the node's shared frps vhost port. */
+  private Map<String, Object> httpProxy(Tunnel t) {
+    Node node = t.getNodeId() == null ? null : nodes.findById(t.getNodeId()).orElse(null);
+    if (node == null || node.getVhostHttpPort() == null) return null;
+
+    Map<String, Object> proxy = new LinkedHashMap<>();
+    proxy.put("tunnelId", t.getId().toString());
+    proxy.put("name", "tunnel-" + t.getId());
+    proxy.put("type", "http");
+    proxy.put("serverAddr", node.getPublicAddress());
+    proxy.put("serverPort", 7000); // frps bindPort, detail.md §9
+    proxy.put("domain", t.getDomain());
+    proxy.put("localHost", t.getTargetHost());
+    proxy.put("localPort", t.getTargetPort());
+    if (t.getBandwidthLimitMbps() != null) proxy.put("bandwidthLimitMbps", t.getBandwidthLimitMbps());
+    return proxy;
   }
 
   /** Writes a new configuration version if the payload changed. Returns the version number. */

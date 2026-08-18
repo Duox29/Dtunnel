@@ -25,6 +25,13 @@ public class TunnelController {
                                     @Min(1) @Max(65535) int targetPort,
                                     Integer bandwidthLimitMbps, Integer maxConnections) {}
 
+  /** detail.md §3.6: HTTP tunnel — domain-routed, no port allocation. */
+  public record CreateHttpTunnelRequest(@NotBlank String nodeId, @NotBlank String agentId,
+                                        @NotBlank String name, @NotBlank String domain,
+                                        @NotBlank String targetHost,
+                                        @Min(1) @Max(65535) int targetPort,
+                                        Integer bandwidthLimitMbps) {}
+
   private final TunnelService service;
   private final UsageService usageService;
   private final CurrentUser currentUser;
@@ -66,6 +73,16 @@ public class TunnelController {
     return json(t);
   }
 
+  /** detail.md §3.6: create a domain-routed HTTP tunnel. */
+  @PostMapping("/http")
+  @ResponseStatus(HttpStatus.CREATED)
+  public Map<String, Object> createHttp(@jakarta.validation.Valid @RequestBody CreateHttpTunnelRequest req) {
+    User u = currentUser.require();
+    Tunnel t = service.createHttp(u.getId(), UUID.fromString(req.nodeId()), UUID.fromString(req.agentId()),
+        req.name(), req.domain(), req.targetHost(), req.targetPort(), req.bandwidthLimitMbps());
+    return json(t);
+  }
+
   @GetMapping
   public List<Map<String, Object>> list() {
     User u = currentUser.require();
@@ -93,8 +110,11 @@ public class TunnelController {
     Map<String, Object> m = new LinkedHashMap<>();
     m.put("id", t.getId().toString());
     m.put("name", t.getName());
+    m.put("type", t.getTunnelType());
     m.put("agentId", t.getAgentId().toString());
-    m.put("allocationId", t.getPortAllocationId().toString());
+    m.put("allocationId", t.getPortAllocationId() == null ? null : t.getPortAllocationId().toString());
+    m.put("nodeId", t.getNodeId() == null ? null : t.getNodeId().toString());
+    m.put("domain", t.getDomain());
     m.put("targetHost", t.getTargetHost());
     m.put("targetPort", t.getTargetPort());
     m.put("bandwidthLimitMbps", t.getBandwidthLimitMbps());

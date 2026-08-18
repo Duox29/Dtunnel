@@ -53,7 +53,13 @@ func (a *Adapter) RenderConfig(agentID, deviceToken string, proxies []control.Pr
 		fmt.Fprintf(&b, "type = %q\n", p.Type)
 		fmt.Fprintf(&b, "localIP = %q\n", p.LocalHost)
 		fmt.Fprintf(&b, "localPort = %d\n", p.LocalPort)
-		fmt.Fprintf(&b, "remotePort = %d\n", p.RemotePort)
+		if p.Type == "http" || p.Type == "https" {
+			// detail.md §3.6: domain-routed over the node's shared frps vhost
+			// HTTP port; frps routes by Host header, Caddy terminates TLS.
+			fmt.Fprintf(&b, "customDomains = [%q]\n", p.Domain)
+		} else {
+			fmt.Fprintf(&b, "remotePort = %d\n", p.RemotePort)
+		}
 		if p.BandwidthLimitMbps > 0 {
 			// frp's unit is bytes/s ("MB" = 1024*1024 bytes, pkg/config/types);
 			// our field is megabits/s, so convert: Mbps * 1e6 / 8 = bytes/s,

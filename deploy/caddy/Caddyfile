@@ -1,0 +1,14 @@
+# detail.md §3.6: Caddy is the HTTP/HTTPS edge. It terminates TLS (automatic
+# in production with real DNS) and forwards to the node's frps vhost HTTP
+# port, preserving the Host header so frps can route by domain.
+#
+# Local/dev: plain HTTP on :8090 (no DNS, no ACME). Production: replace with
+# a wildcard site like *.tunnels.example.com and Caddy obtains certificates.
+{
+	auto_https off
+	admin off
+}
+
+:8090 {
+	reverse_proxy frps-vn01:8081
+}

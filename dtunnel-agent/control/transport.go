@@ -9,10 +9,11 @@ import "context"
 type Proxy struct {
 	TunnelID           string `json:"tunnelId"`
 	Name               string `json:"name"`
-	Type               string `json:"type"` // tcp | udp
+	Type               string `json:"type"` // tcp | udp | http
 	ServerAddr         string `json:"serverAddr"`
 	ServerPort         int    `json:"serverPort"`
 	RemotePort         int    `json:"remotePort"`
+	Domain             string `json:"domain,omitempty"` // http only (§3.6)
 	LocalHost          string `json:"localHost"`
 	LocalPort          int    `json:"localPort"`
 	BandwidthLimitMbps int    `json:"bandwidthLimitMbps,omitempty"`

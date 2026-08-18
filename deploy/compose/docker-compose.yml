@@ -43,6 +43,14 @@ services:
     depends_on: [control-plane]
     ports: ["3000:80"]
 
+  # detail.md §3.6: HTTP/HTTPS edge in front of frps vhost (domain routing)
+  caddy:
+    image: caddy:2-alpine
+    depends_on: [frps-vn01]
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports: ["8090:8090"]
+
   frps-vn01:
     image: fatedier/frps:v0.71.0
     volumes: ["../frps/frps-vn01.toml:/etc/frp/frps.toml:ro"]

@@ -16,8 +16,20 @@ public class Tunnel {
   @Column(name = "agent_id", nullable = false)
   private UUID agentId;
 
-  @Column(name = "port_allocation_id", nullable = false)
+  @Column(name = "port_allocation_id")
   private UUID portAllocationId;
+
+  /** Node hosting this tunnel. Set directly for HTTP tunnels (no allocation). */
+  @Column(name = "node_id")
+  private UUID nodeId;
+
+  /** Public domain for HTTP/HTTPS tunnels (§3.6); null for port-based tunnels. */
+  @Column(name = "domain")
+  private String domain;
+
+  /** PORT (tcp/udp via allocation) | HTTP (domain-routed, §3.6). */
+  @Column(name = "tunnel_type", nullable = false)
+  private String tunnelType = "PORT";
 
   @Column(nullable = false)
   private String name;
@@ -45,6 +57,12 @@ public class Tunnel {
   public void setAgentId(UUID agentId) { this.agentId = agentId; }
   public UUID getPortAllocationId() { return portAllocationId; }
   public void setPortAllocationId(UUID portAllocationId) { this.portAllocationId = portAllocationId; }
+  public UUID getNodeId() { return nodeId; }
+  public void setNodeId(UUID nodeId) { this.nodeId = nodeId; }
+  public String getDomain() { return domain; }
+  public void setDomain(String domain) { this.domain = domain; }
+  public String getTunnelType() { return tunnelType; }
+  public void setTunnelType(String tunnelType) { this.tunnelType = tunnelType; }
   public String getName() { return name; }
   public void setName(String name) { this.name = name; }
   public String getTargetHost() { return targetHost; }

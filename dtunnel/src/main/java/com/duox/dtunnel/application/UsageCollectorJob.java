@@ -71,7 +71,7 @@ public class UsageCollectorJob {
   }
 
   private void collectNode(Node node, String base) throws Exception {
-    for (String type : new String[]{"tcp", "udp"}) {
+    for (String type : new String[]{"tcp", "udp", "http"}) {
       HttpRequest req = HttpRequest.newBuilder()
           .uri(URI.create(base.replaceAll("/$", "") + "/api/proxy/" + type))
           .timeout(Duration.ofSeconds(5))

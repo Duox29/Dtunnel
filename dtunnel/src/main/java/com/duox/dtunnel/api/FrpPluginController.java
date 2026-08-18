@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -107,20 +108,35 @@ public class FrpPluginController {
         Tunnel t = tunnels.findById(tunnelId).orElse(null);
         if (t == null || !t.getAgentId().equals(ident.agent.getId())) return deny("unknown tunnel or wrong agent");
 
-        PortAllocation alloc = allocations.findById(t.getPortAllocationId()).orElse(null);
-        if (alloc == null) return deny("no allocation");
-        if (alloc.getExpiresAt().isBefore(Instant.now())) return deny("allocation expired");
-
-        Port port = ports.findById(alloc.getPortId()).orElse(null);
-        if (port == null) return deny("no port");
-
-        Object remotePort = c.get("remote_port");
-        if (remotePort instanceof Number n && n.intValue() != port.getPortNumber()) {
-          return deny("remote_port does not match allocation");
-        }
         String proxyType = str(c.get("proxy_type"));
-        if (proxyType != null && !proxyType.equalsIgnoreCase(port.getProtocol())) {
-          return deny("proxy type does not match allocation");
+        if ("http".equalsIgnoreCase(proxyType) || "https".equalsIgnoreCase(proxyType)) {
+          // §3.6: domain-routed tunnel — no port allocation; the claimed domain
+          // must be exactly the tunnel's registered domain.
+          if (!"HTTP".equals(t.getTunnelType())) return deny("tunnel is not an HTTP tunnel");
+          Object cd = c.get("custom_domains");
+          boolean domainOk = cd instanceof List<?> l && l.size() == 1
+              && t.getDomain() != null && t.getDomain().equalsIgnoreCase(str(l.get(0)));
+          if (!domainOk) return deny("custom_domains does not match tunnel domain");
+        } else {
+          if (t.getPortAllocationId() == null) return deny("no allocation");
+          PortAllocation alloc = allocations.findById(t.getPortAllocationId()).orElse(null);
+          if (alloc == null) return deny("no allocation");
+          if (alloc.getExpiresAt().isBefore(Instant.now())) return deny("allocation expired");
+
+          Port port = ports.findById(alloc.getPortId()).orElse(null);
+          if (port == null) return deny("no port");
+
+          Object remotePort = c.get("remote_port");
+          if (remotePort instanceof Number n && n.intValue() != port.getPortNumber()) {
+            return deny("remote_port does not match allocation");
+          }
+          if (proxyType != null && !proxyType.equalsIgnoreCase(port.getProtocol())) {
+            return deny("proxy type does not match allocation");
+          }
+          if (port.getStatus() == PortStatus.ALLOCATED) {
+            port.setStatus(PortStatus.ACTIVE);
+            ports.save(port);
+          }
         }
 
         if (t.getStatus() == TunnelStatus.CONFIGURED || t.getStatus() == TunnelStatus.STARTING
@@ -128,12 +144,8 @@ public class FrpPluginController {
           t.setStatus(TunnelStatus.STARTING);
           tunnels.save(t);
         }
-        if (port.getStatus() == PortStatus.ALLOCATED) {
-          port.setStatus(PortStatus.ACTIVE);
-          ports.save(port);
-        }
         audit.log(ident.agent.getId().toString(), "AGENT", "frp.new_proxy", "tunnel",
-            tunnelId.toString(), "SUCCESS", Map.of("remotePort", port.getPortNumber()));
+            tunnelId.toString(), "SUCCESS", meta("type", proxyType));
         return allow();
       }
       case "Ping" -> {

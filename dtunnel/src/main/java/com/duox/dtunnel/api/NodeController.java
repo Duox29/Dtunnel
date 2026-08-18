@@ -22,7 +22,7 @@ public class NodeController {
 
   public record RegisterNodeRequest(@NotBlank String code, @NotBlank String region,
                                     @NotBlank String publicAddress, List<String> protocolCapabilities,
-                                    String frpsAdminUrl) {}
+                                    String frpsAdminUrl, Integer vhostHttpPort) {}
   public record SeedPortsRequest(@NotBlank String protocol,
                                  @Min(1) @Max(65535) int start,
                                  @Min(1) @Max(65535) int end) {}
@@ -58,10 +58,14 @@ public class NodeController {
     var admin = currentUser.requireSuperadmin();
     Node n = nodeService.registerNode(admin.getEmail(), req.code(), req.region(),
         req.publicAddress(), req.protocolCapabilities(), req.frpsAdminUrl());
+    if (req.vhostHttpPort() != null) {
+      n.setVhostHttpPort(req.vhostHttpPort());
+      nodes.save(n);
+    }
     return json(n);
   }
 
-  public record UpdateNodeRequest(String publicAddress, String frpsAdminUrl) {}
+  public record UpdateNodeRequest(String publicAddress, String frpsAdminUrl, Integer vhostHttpPort) {}
 
   /** SUPERADMIN: update node endpoints (e.g. point usage collection at frps admin API). */
   @PatchMapping("/{id}")
@@ -72,6 +76,7 @@ public class NodeController {
         .orElseThrow(() -> com.duox.dtunnel.application.ApiException.notFound("node"));
     if (req.publicAddress() != null && !req.publicAddress().isBlank()) n.setPublicAddress(req.publicAddress());
     if (req.frpsAdminUrl() != null) n.setFrpsAdminUrl(req.frpsAdminUrl().isBlank() ? null : req.frpsAdminUrl());
+    if (req.vhostHttpPort() != null) n.setVhostHttpPort(req.vhostHttpPort() == 0 ? null : req.vhostHttpPort());
     nodes.save(n);
     return json(n);
   }
@@ -107,6 +112,7 @@ public class NodeController {
     m.put("publicAddress", n.getPublicAddress());
     m.put("protocolCapabilities", n.getProtocolCapabilities());
     m.put("frpsAdminUrl", n.getFrpsAdminUrl());
+    m.put("vhostHttpPort", n.getVhostHttpPort());
     m.put("status", n.getStatus().name());
     // Node Agent (§1/§3.4): token shown to SUPERADMIN at registration;
     // lastSeen + capacity come from duox-node-agent heartbeats.

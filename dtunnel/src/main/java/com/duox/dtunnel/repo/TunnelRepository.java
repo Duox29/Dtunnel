@@ -12,4 +12,5 @@ public interface TunnelRepository extends JpaRepository<Tunnel, UUID> {
   List<Tunnel> findByPortAllocationId(UUID portAllocationId);
   List<Tunnel> findByStatus(TunnelStatus status);
   List<Tunnel> findByStatusIn(List<TunnelStatus> statuses);
+  java.util.Optional<Tunnel> findByDomain(String domain);
 }
