@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * detail.md §10 background jobs. Each transition is checked, not blindly
@@ -139,13 +140,37 @@ public class LifecycleJobs {
   public void reconcileDesiredVsObserved() {
     // STARTING tunnels whose agent went silent get flagged; the agent's next
     // heartbeat/config poll drives the actual restart.
+    java.util.Set<UUID> errorPublish = new java.util.HashSet<>();
     for (Tunnel t : tunnels.findByStatus(TunnelStatus.STARTING)) {
       Agent a = agents.findById(t.getAgentId()).orElse(null);
       if (a == null || a.getStatus() == AgentStatus.OFFLINE || a.getStatus() == AgentStatus.REVOKED) {
         t.setStatus(TunnelStatus.ERROR);
         tunnels.save(t);
+        errorPublish.add(t.getAgentId());
         audit.log("system", "SYSTEM", "tunnel.reconcile_error", "tunnel", t.getId().toString(), "SUCCESS", null);
       }
+    }
+    for (UUID agentId : errorPublish) {
+      desiredState.publish(agentId); // ERROR leaves the desired set → bump version
+    }
+
+    // detail.md §11 recovery: ERROR tunnels whose agent is back ONLINE are
+    // re-armed (ERROR → STARTING) and re-published so the agent restarts them.
+    // ERROR is only ever reached via an unexpected close/flag, never by an
+    // explicit user stop (that path is STOPPING → STOPPED), so recovery is safe.
+    java.util.Set<UUID> republish = new java.util.HashSet<>();
+    for (Tunnel t : tunnels.findByStatus(TunnelStatus.ERROR)) {
+      Agent a = agents.findById(t.getAgentId()).orElse(null);
+      if (a != null && a.getStatus() == AgentStatus.ONLINE) {
+        t.setStatus(TunnelStatus.STARTING);
+        tunnels.save(t);
+        republish.add(t.getAgentId());
+        audit.log("system", "SYSTEM", "tunnel.reconcile_recover", "tunnel", t.getId().toString(), "SUCCESS", null);
+        log.info("tunnel {} recovered from ERROR (agent {} back online)", t.getId(), a.getId());
+      }
+    }
+    for (UUID agentId : republish) {
+      desiredState.publish(agentId);
     }
   }
 }

@@ -97,10 +97,9 @@ public class AgentApiController {
     AgentPrincipal agent = (AgentPrincipal) principal;
     Agent a = agents.findById(agent.agentId()).orElseThrow();
     if (a.getStatus() == AgentStatus.REVOKED) throw new ApiException(HttpStatus.FORBIDDEN, "agent revoked");
-    Map<String, Object> payload = a.getStatus() == AgentStatus.ONLINE
-        ? desiredState.buildPayload(agent.agentId())
-        : Map.of("agentId", agent.agentId().toString(), "proxies", List.of());
-    return Map.of("version", desiredState.currentVersion(agent.agentId()), "payload", payload);
+    // Single source of truth (§11): return the stored configuration version so
+    // the version number always matches the payload the agent applies.
+    return desiredState.storedConfig(agent.agentId());
   }
 
   /**

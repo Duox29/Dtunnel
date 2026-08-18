@@ -55,7 +55,11 @@ func (a *Adapter) RenderConfig(agentID, deviceToken string, proxies []control.Pr
 		fmt.Fprintf(&b, "localPort = %d\n", p.LocalPort)
 		fmt.Fprintf(&b, "remotePort = %d\n", p.RemotePort)
 		if p.BandwidthLimitMbps > 0 {
-			fmt.Fprintf(&b, "transport.bandwidthLimit = %q\n", fmt.Sprintf("%dMB", p.BandwidthLimitMbps))
+			// frp's unit is bytes/s ("MB" = 1024*1024 bytes, pkg/config/types);
+			// our field is megabits/s, so convert: Mbps * 1e6 / 8 = bytes/s,
+			// expressed in KB (1024 bytes) for precision.
+			kb := p.BandwidthLimitMbps * 125000 / 1024
+			fmt.Fprintf(&b, "transport.bandwidthLimit = %q\n", fmt.Sprintf("%dKB", kb))
 		}
 		b.WriteString("\n")
 	}

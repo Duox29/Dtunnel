@@ -43,6 +43,25 @@ public class DesiredStateService {
     return versions.latestVersion(agentId);
   }
 
+  /**
+   * detail.md §11: configuration_versions is the single source of truth for
+   * what the agent should run. /agent/v1/config returns this STORED payload so
+   * the version number always matches what the agent applies — a live rebuild
+   * here can diverge from the stored version and strand the agent.
+   */
+  public Map<String, Object> storedConfig(UUID agentId) {
+    return versions.findTopByAgentIdOrderByVersionDesc(agentId)
+        .map(cv -> {
+          Map<String, Object> m = new LinkedHashMap<>();
+          m.put("version", cv.getVersion());
+          m.put("payload", cv.getPayload());
+          return m;
+        })
+        .orElseGet(() -> Map.of(
+            "version", 0,
+            "payload", Map.of("agentId", agentId.toString(), "proxies", List.of())));
+  }
+
   public Map<String, Object> buildPayload(UUID agentId) {
     List<Map<String, Object>> proxies = new ArrayList<>();
     for (Tunnel t : desiredTunnels(agentId)) {

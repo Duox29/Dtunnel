@@ -1,6 +1,7 @@
 package com.duox.dtunnel.api;
 
 import com.duox.dtunnel.application.AuditService;
+import com.duox.dtunnel.application.DesiredStateService;
 import com.duox.dtunnel.domain.*;
 import com.duox.dtunnel.repo.*;
 import com.duox.dtunnel.security.AgentTokenService;
@@ -37,10 +38,12 @@ public class FrpPluginController {
   private final PortAllocationRepository allocations;
   private final PortRepository ports;
   private final AuditService audit;
+  private final DesiredStateService desiredState;
   private final String pluginToken;
 
   public FrpPluginController(AgentRepository agents, AgentTokenService tokens, TunnelRepository tunnels,
                              PortAllocationRepository allocations, PortRepository ports, AuditService audit,
+                             DesiredStateService desiredState,
                              @Value("${dtunnel.frp.plugin-token:}") String pluginToken) {
     this.agents = agents;
     this.tokens = tokens;
@@ -48,6 +51,7 @@ public class FrpPluginController {
     this.allocations = allocations;
     this.ports = ports;
     this.audit = audit;
+    this.desiredState = desiredState;
     this.pluginToken = pluginToken;
   }
 
@@ -149,6 +153,9 @@ public class FrpPluginController {
               && (t.getStatus() == TunnelStatus.ACTIVE || t.getStatus() == TunnelStatus.STARTING)) {
             t.setStatus(TunnelStatus.ERROR); // unexpected close; reconciler may restart (§11)
             tunnels.save(t);
+            // ERROR leaves the desired set → publish so the stored version bumps
+            // and the agent converges; the reconciler re-adds it on recovery.
+            desiredState.publish(t.getAgentId());
             audit.log(ident.agent.getId().toString(), "AGENT", "frp.close_proxy", "tunnel",
                 tunnelId.toString(), "SUCCESS", null);
           }
