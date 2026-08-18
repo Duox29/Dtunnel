@@ -107,6 +107,10 @@ public class TunnelService {
     return superadmin ? tunnels.findAll() : tunnels.findByUserId(userId);
   }
 
+  public Tunnel ownedFor(UUID userId, UUID tunnelId) {
+    return owned(userId, tunnelId);
+  }
+
   private Tunnel owned(UUID userId, UUID tunnelId) {
     Tunnel t = tunnels.findById(tunnelId).orElseThrow(() -> ApiException.notFound("tunnel"));
     if (!t.getUserId().equals(userId)) throw ApiException.forbidden("tunnel belongs to another user");

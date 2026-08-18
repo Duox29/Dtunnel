@@ -44,10 +44,11 @@ type Runtime struct {
 	rest    *control.RESTTransport
 	adapter *frp.Adapter
 
-	mu      sync.Mutex
-	current *control.DesiredState
-	frpcCmd *exec.Cmd
-	reports []control.TunnelReport
+	mu          sync.Mutex
+	current     *control.DesiredState
+	frpcCmd     *exec.Cmd
+	frpcStarted time.Time
+	stats       *frp.StatsClient
 }
 
 func New(opts Options, log *slog.Logger) *Runtime {
@@ -56,6 +57,7 @@ func New(opts Options, log *slog.Logger) *Runtime {
 		log:     log,
 		rest:    control.NewRESTTransport(opts.ServerURL),
 		adapter: frp.NewAdapter(opts.FrpcPath, workDir()),
+		stats:   frp.NewStatsClient(),
 	}
 }
 
@@ -191,6 +193,7 @@ func (r *Runtime) applyDesired(ctx context.Context, st *state, desired *control.
 		}
 		r.mu.Lock()
 		r.frpcCmd = cmd
+		r.frpcStarted = time.Now()
 		r.mu.Unlock()
 		r.log.Info("frpc started", "proxies", len(desired.Payload.Proxies), "version", desired.Version)
 	} else {
@@ -216,17 +219,38 @@ func (r *Runtime) heartbeat(ctx context.Context, st *state) {
 	r.mu.Lock()
 	current := r.current
 	cmd := r.frpcCmd
+	started := r.frpcStarted
 	r.mu.Unlock()
+
+	// sample per-proxy traffic counters from frpc's admin API (best-effort,
+	// detail.md Milestone 3.3 usage metering)
+	statsByName := map[string]frp.ProxyStats{}
+	if cmd != nil && cmd.ProcessState == nil {
+		if stats, err := r.stats.Proxies(ctx); err == nil {
+			for _, s := range stats {
+				statsByName[s.Name] = s
+			}
+		}
+	}
 
 	var reports []control.TunnelReport
 	if current != nil {
 		frpcAlive := cmd != nil && cmd.ProcessState == nil
+		activeSeconds := 0
+		if frpcAlive && !started.IsZero() {
+			activeSeconds = int(time.Since(started).Seconds())
+		}
 		for _, p := range current.Payload.Proxies {
 			status := "STOPPED"
 			if frpcAlive {
 				status = "RUNNING"
 			}
-			reports = append(reports, control.TunnelReport{TunnelID: p.TunnelID, Status: status})
+			rep := control.TunnelReport{TunnelID: p.TunnelID, Status: status, ActiveSeconds: activeSeconds}
+			if s, ok := statsByName[p.Name]; ok {
+				rep.BytesIn = s.TrafficIn
+				rep.BytesOut = s.TrafficOut
+			}
+			reports = append(reports, rep)
 		}
 	}
 	desiredVersion, err := r.rest.Heartbeat(ctx, st.AppliedVersion, Version, reports)

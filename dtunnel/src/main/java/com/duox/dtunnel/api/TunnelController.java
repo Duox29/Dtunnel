@@ -1,6 +1,7 @@
 package com.duox.dtunnel.api;
 
 import com.duox.dtunnel.application.TunnelService;
+import com.duox.dtunnel.application.UsageService;
 import com.duox.dtunnel.domain.Tunnel;
 import com.duox.dtunnel.domain.User;
 import jakarta.validation.constraints.Max;
@@ -25,11 +26,24 @@ public class TunnelController {
                                     Integer bandwidthLimitMbps, Integer maxConnections) {}
 
   private final TunnelService service;
+  private final UsageService usageService;
   private final CurrentUser currentUser;
 
-  public TunnelController(TunnelService service, CurrentUser currentUser) {
+  public TunnelController(TunnelService service, UsageService usageService, CurrentUser currentUser) {
     this.service = service;
+    this.usageService = usageService;
     this.currentUser = currentUser;
+  }
+
+  /** detail.md Milestone 3.3: per-tunnel usage totals for the owner. */
+  @GetMapping("/{id}/usage")
+  public Map<String, Object> usage(@PathVariable UUID id) {
+    User u = currentUser.require();
+    Tunnel t = service.ownedFor(u.getId(), id);
+    return Map.of(
+        "tunnelId", t.getId().toString(),
+        "bytesIn", usageService.bytesIn(id),
+        "bytesOut", usageService.bytesOut(id));
   }
 
   @PostMapping

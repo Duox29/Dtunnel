@@ -248,4 +248,70 @@ class BusinessLoopIntegrationTest {
     JsonNode arr = json.readTree(audits);
     assert arr.size() > 0 : "audit trail must not be empty";
   }
+
+  /** detail.md Milestone 3.1: one agent carries multiple tunnels at once. */
+  @Test @Order(10)
+  void multipleTunnelsPerAgent() throws Exception {
+    // second request → second allocation on a different port
+    String reqJson = doPost(userCookie, "/api/v1/resource-requests",
+        Map.of("nodeId", nodeId, "protocol", "TCP", "preferredPort", 20006, "durationDays", 30, "purpose", "second"));
+    String requestId = json.readTree(reqJson).get("id").asText();
+    String approval = doPost(adminCookie, "/api/v1/resource-requests/" + requestId + "/approve", null);
+    String alloc2 = json.readTree(approval).get("allocationId").asText();
+
+    String t2 = doPost(userCookie, "/api/v1/tunnels",
+        Map.of("allocationId", alloc2, "agentId", agentId, "name", "second",
+               "targetHost", "127.0.0.1", "targetPort", 25566));
+    String tunnel2Id = json.readTree(t2).get("id").asText();
+
+    // agent's desired state now carries BOTH proxies
+    MvcResult res = mvc.perform(get("/agent/v1/config")
+            .header("Authorization", "Bearer " + agentToken))
+        .andExpect(status().isOk())
+        .andReturn();
+    JsonNode proxies = json.readTree(res.getResponse().getContentAsString()).get("payload").get("proxies");
+    assert proxies.size() == 2 : "agent should see two desired proxies, got " + proxies.size();
+
+    java.util.Set<Integer> remotePorts = new java.util.HashSet<>();
+    for (JsonNode p : proxies) remotePorts.add(p.get("remotePort").asInt());
+    assert remotePorts.contains(20005) && remotePorts.contains(20006)
+        : "both allocated ports must be present: " + remotePorts;
+
+    // heartbeat marks the second tunnel ACTIVE too
+    mvc.perform(post("/agent/v1/heartbeat")
+            .header("Authorization", "Bearer " + agentToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of(
+                "appliedVersion", 2,
+                "tunnels", List.of(
+                    Map.of("tunnelId", tunnelId, "status", "RUNNING"),
+                    Map.of("tunnelId", tunnel2Id, "status", "RUNNING"))))))
+        .andExpect(status().isOk());
+
+    String tunnels = doGet(userCookie, "/api/v1/tunnels");
+    int active = 0;
+    for (JsonNode t : json.readTree(tunnels)) {
+      if ("ACTIVE".equals(t.get("status").asText())) active++;
+    }
+    assert active == 2 : "both tunnels should be ACTIVE, got " + active;
+  }
+
+  /** detail.md Milestone 3.3: usage counters reported via heartbeat are metered. */
+  @Test @Order(11)
+  void usageMetering() throws Exception {
+    mvc.perform(post("/agent/v1/heartbeat")
+            .header("Authorization", "Bearer " + agentToken)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of(
+                "appliedVersion", 2,
+                "tunnels", List.of(Map.of(
+                    "tunnelId", tunnelId, "status", "RUNNING",
+                    "bytesIn", 12345, "bytesOut", 67890, "activeSeconds", 60))))))
+        .andExpect(status().isOk());
+
+    String usage = doGet(userCookie, "/api/v1/tunnels/" + tunnelId + "/usage");
+    JsonNode u = json.readTree(usage);
+    assert u.get("bytesIn").asLong() >= 12345 : "bytesIn should be metered";
+    assert u.get("bytesOut").asLong() >= 67890 : "bytesOut should be metered";
+  }
 }

@@ -28,9 +28,14 @@ type DesiredState struct {
 }
 
 // TunnelReport is the agent's observed per-tunnel state for heartbeats.
+// BytesIn/BytesOut are cumulative counters sampled from frpc's admin API
+// (detail.md Milestone 3.3 usage metering).
 type TunnelReport struct {
-	TunnelID string `json:"tunnelId"`
-	Status   string `json:"status"` // RUNNING | STOPPED | ERROR
+	TunnelID      string `json:"tunnelId"`
+	Status        string `json:"status"` // RUNNING | STOPPED | ERROR
+	BytesIn       int64  `json:"bytesIn,omitempty"`
+	BytesOut      int64  `json:"bytesOut,omitempty"`
+	ActiveSeconds int    `json:"activeSeconds,omitempty"`
 }
 
 // AgentTransport abstracts the channel (REST now, gRPC later — §4).
