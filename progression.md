@@ -79,6 +79,16 @@ strand the agent (bug found + fixed during E2E).
 **Observability gotcha:** Prometheus/Grafana run as non-root container users;
 mounted config files must be world-readable (644), not the default 600.
 
+## Post-Milestone-4 — Compliance audit + frontend polish
+
+| Step | Status | Notes |
+|---|---|---|
+| Section-by-section detail.md audit | ✅ | **AUDIT.md** — every §0–§16 verified; deviations (Java 25/Boot 4, React 19, custom Tailwind tokens vs literal shadcn) + deferrals documented |
+| aggregateUsage() (§10) | ✅ | was missing → UsageAggregateJob (ShedLock, hourly cron, idempotent upsert) + usage_daily table (V3) + GET /tunnels/{id}/usage/history; Order 13 test |
+| GitHub Actions CI (§3.8) | ✅ | .github/workflows/ci.yml — control-plane tests, agent vet+build, web build |
+| goreleaser (§3.4) | ✅ | dtunnel-agent/.goreleaser.yaml — linux/windows amd64+arm64 |
+| Frontend polish (market-style) | ✅ | ngrok/Cloudflare/Tailscale patterns: sidebar shell + icons, KPI stat cards, Recharts traffic chart (§3.5), status pills w/ dot+pulse, relative time, empty states, toasts, confirm dialogs, copy buttons, split-panel login; verified via Vite dev server against live API |
+
 ## Milestone 5+ — deferred (Phase 2 candidates)
 
 gRPC transport, HTTP/HTTPS domain routing (Caddy), macOS agent, billing/Stripe — per §14, only after Milestones 1–4 are stable in production use.
