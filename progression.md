@@ -43,10 +43,17 @@ Update after every successful step; each entry maps to a git commit.
 
 | Step | Status | Notes |
 |---|---|---|
-| Multiple tunnels per agent | ⬜ | desired-state already supports N proxies; needs test |
+| Multiple tunnels per agent | ✅ | test: 2 proxies in desired state, both ACTIVE (Order 10) |
+| Usage metering (usage_records) | ✅ | **server-side** per §1: UsageCollectorJob polls each node's frps admin API (`/api/proxy/{type}` → todayTrafficIn/Out), records deltas into usage_records; `GET /api/v1/tunnels/{id}/usage`; nodes.frps_admin_url (V2) + `PATCH /api/v1/nodes/{id}`; test uses stub frps endpoint (Order 11) |
 | Second node + selection UX | ⬜ | |
-| Usage metering (usage_records) | ⬜ | |
 | QoS: bandwidthLimit + max connections | 🚧 partial | bandwidthLimit rendered in frpc.toml; enforcement untested |
+
+**Usage architecture note:** frpc v0.71 exposes NO client-side traffic API
+(`/api/status` has no counters; no client Prometheus metrics). frps DOES expose
+per-proxy daily counters via its admin API. Since §1 says the server is
+authoritative, collection lives in the control plane (UsageCollectorJob,
+ShedLock-guarded, 60s poll, delta-based with day-rollover handling).
+Agent-side sampling was built then removed as dead code.
 
 ## Milestone 4+ — deferred
 
