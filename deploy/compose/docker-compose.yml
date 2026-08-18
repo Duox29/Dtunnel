@@ -1,0 +1,51 @@
+# detail.md §13: minimal MVP compose stack
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: tunnelplatform
+      POSTGRES_USER: tunnelplatform
+      POSTGRES_PASSWORD: change_me
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tunnelplatform"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  control-plane:
+    build: ../../dtunnel
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tunnelplatform
+      SPRING_DATASOURCE_USERNAME: tunnelplatform
+      SPRING_DATASOURCE_PASSWORD: change_me
+      SPRING_REDIS_HOST: redis
+      DTUNNEL_SUPERADMIN_EMAIL: admin@duox.local
+      DTUNNEL_SUPERADMIN_PASSWORD: admin-change-me
+      DTUNNEL_FRP_PLUGIN_TOKEN: ""
+    ports: ["8080:8080"]
+
+  frps-vn01:
+    image: fatedier/frps:latest
+    volumes: ["../frps/frps-vn01.toml:/etc/frp/frps.toml:ro"]
+    command: ["-c", "/etc/frp/frps.toml"]
+    depends_on: [control-plane]
+    ports:
+      - "7000:7000"
+      - "20000-20100:20000-20100"
+
+volumes:
+  pgdata:

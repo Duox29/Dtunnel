@@ -65,8 +65,12 @@ public class FrpPluginController {
   @PostMapping
   @Transactional
   public Map<String, Object> handle(@RequestBody PluginRequest req,
-                                    @org.springframework.web.bind.annotation.RequestHeader(value = "X-Frp-Plugin-Token", required = false) String headerToken) {
-    if (pluginToken != null && !pluginToken.isBlank() && !pluginToken.equals(headerToken)) {
+                                    @org.springframework.web.bind.annotation.RequestHeader(value = "X-Frp-Plugin-Token", required = false) String headerToken,
+                                    @org.springframework.web.bind.annotation.RequestParam(value = "token", required = false) String queryToken) {
+    // frps server plugins cannot send custom headers (verified against frp
+    // 0.63), so the shared secret may also travel as a query parameter.
+    String presented = headerToken != null && !headerToken.isBlank() ? headerToken : queryToken;
+    if (pluginToken != null && !pluginToken.isBlank() && !pluginToken.equals(presented)) {
       return deny("bad plugin token");
     }
     if (req == null || req.op() == null || req.content() == null) return deny("malformed request");

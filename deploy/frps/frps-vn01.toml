@@ -1,0 +1,16 @@
+# detail.md §9: static per-node frps config — deployed once, rarely changes.
+# Per-tunnel authorization happens via the httpPlugins callback, not here.
+bindPort = 7000
+
+# broad range owned by this node; the platform only hands out ports inside it
+allowPorts = [
+  { start = 20000, end = 20100 }
+]
+
+[[httpPlugins]]
+  name = "duox-authz"
+  addr = "http://control-plane:8080"
+  # shared secret travels as a query param (frps plugins support no custom
+  # headers); must match DTUNNEL_FRP_PLUGIN_TOKEN on the control plane
+  path = "/agent/v1/frp-plugin?token="
+  ops = ["Login", "NewProxy", "Ping", "CloseProxy"]
