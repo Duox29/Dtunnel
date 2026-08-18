@@ -18,8 +18,13 @@ export interface UsageHistory {
 export interface TunnelInfo {
   id: string;
   name: string;
+  /** PORT = dedicated-port tcp/udp; HTTP = domain-routed (detail.md §3.6). */
+  type: "PORT" | "HTTP";
   agentId: string;
-  allocationId: string;
+  allocationId?: string | null;
+  nodeId?: string | null;
+  /** Public domain for HTTP tunnels. */
+  domain?: string | null;
   targetHost: string;
   targetPort: number;
   bandwidthLimitMbps?: number | null;

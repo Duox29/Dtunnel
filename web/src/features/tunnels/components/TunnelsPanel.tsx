@@ -6,7 +6,7 @@ import {
 import { useAgents } from "../../agents/hooks";
 import { useNodes } from "../../nodes/hooks";
 import { usePorts } from "../../ports/hooks";
-import { useTunnels, useCreateTunnel, useStartTunnel, useStopTunnel, useDeleteTunnel, useTunnelUsage } from "../hooks";
+import { useTunnels, useCreateTunnel, useCreateHttpTunnel, useStartTunnel, useStopTunnel, useDeleteTunnel, useTunnelUsage } from "../hooks";
 import { UsageChart } from "./UsageChart";
 import { formatBytes, shortId } from "../../../lib/format";
 
@@ -38,17 +38,23 @@ export function TunnelsPanel() {
   const agents = useAgents();
   const nodes = useNodes();
   const createTunnel = useCreateTunnel();
+  const createHttp = useCreateHttpTunnel();
   const start = useStartTunnel();
   const stop = useStopTunnel();
   const remove = useDeleteTunnel();
   const toast = useToast();
 
+  // detail.md §3.6: two tunnel kinds — dedicated-port (tcp/udp) and
+  // domain-routed HTTP over the node's shared vhost port.
+  const [mode, setMode] = useState<"port" | "domain">("port");
   const [intent, setIntent] = useState<string>("ssh");
   const [alloc, setAlloc] = useState("");
   const [agentId, setAgentId] = useState("");
   const [name, setName] = useState("");
   const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("22");
+  const [httpNode, setHttpNode] = useState("");
+  const [domain, setDomain] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ kind: "stop" | "delete"; id: string; name: string } | null>(null);
 
@@ -64,14 +70,18 @@ export function TunnelsPanel() {
   }
 
   const error =
-    (createTunnel.error instanceof Error && createTunnel.error.message) || "";
+    (createTunnel.error instanceof Error && createTunnel.error.message) ||
+    (createHttp.error instanceof Error && createHttp.error.message) || "";
 
   const usable = (ports.data ?? []).filter((p) => p.allocationId);
   const allocPort = (allocId: string) => usable.find((p) => p.allocationId === allocId);
   const nodeFor = (nodeId: string) => nodes.data?.find((n) => n.id === nodeId);
+  const httpNodes = (nodes.data ?? []).filter((n) => n.vhostHttpPort);
 
   const canCreate =
-    !createTunnel.isPending && !!alloc && !!agentId && !!name && !!port && Number(port) > 0;
+    mode === "port"
+      ? !createTunnel.isPending && !!alloc && !!agentId && !!name && !!port && Number(port) > 0
+      : !createHttp.isPending && !!httpNode && !!agentId && !!name && !!domain && !!port && Number(port) > 0;
 
   const list = tunnels.data ?? [];
 
@@ -80,27 +90,62 @@ export function TunnelsPanel() {
       <CardTitle>Tunnels</CardTitle>
 
       <div className="mb-4 rounded-lg border border-edge-soft bg-panel-2 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-dim">
-          New tunnel — what do you want to expose?
-        </p>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink-dim">
+            New tunnel — what do you want to expose?
+          </p>
+          <div className="flex rounded-md border border-edge-soft text-xs">
+            {(["port", "domain"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`px-2.5 py-1 transition-colors ${
+                  mode === m ? "bg-accent-soft text-accent" : "text-ink-dim hover:text-ink"
+                } ${m === "port" ? "rounded-l-md" : "rounded-r-md"}`}
+              >
+                {m === "port" ? "Port (TCP/UDP)" : "Domain (HTTP)"}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs text-ink-dim">
-            Service
-            <Select value={intent} onChange={chooseIntent}>
-              {INTENTS.map((i) => (
-                <option key={i.id} value={i.id}>{i.label}</option>
-              ))}
-            </Select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-ink-dim">
-            Allocation (public port)
-            <Select value={alloc} onChange={setAlloc}>
-              <option value="">choose…</option>
-              {usable.map((p) => (
-                <option key={p.id} value={p.allocationId!}>:{p.portNumber} ({p.protocol})</option>
-              ))}
-            </Select>
-          </label>
+          {mode === "port" ? (
+            <>
+              <label className="flex flex-col gap-1 text-xs text-ink-dim">
+                Service
+                <Select value={intent} onChange={chooseIntent}>
+                  {INTENTS.map((i) => (
+                    <option key={i.id} value={i.id}>{i.label}</option>
+                  ))}
+                </Select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-ink-dim">
+                Allocation (public port)
+                <Select value={alloc} onChange={setAlloc}>
+                  <option value="">choose…</option>
+                  {usable.map((p) => (
+                    <option key={p.id} value={p.allocationId!}>:{p.portNumber} ({p.protocol})</option>
+                  ))}
+                </Select>
+              </label>
+            </>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1 text-xs text-ink-dim">
+                Node (HTTP edge)
+                <Select value={httpNode} onChange={setHttpNode}>
+                  <option value="">choose…</option>
+                  {httpNodes.map((n) => (
+                    <option key={n.id} value={n.id}>{n.code} (:{n.vhostHttpPort})</option>
+                  ))}
+                </Select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-ink-dim">
+                Public domain
+                <Input placeholder="app.example.com" value={domain} onChange={setDomain} className="w-44" />
+              </label>
+            </>
+          )}
           <label className="flex flex-col gap-1 text-xs text-ink-dim">
             Agent (your device)
             <Select value={agentId} onChange={setAgentId}>
@@ -120,27 +165,37 @@ export function TunnelsPanel() {
           </label>
           <label className="flex flex-col gap-1 text-xs text-ink-dim">
             Target port
-            <Input placeholder="22" value={port} onChange={setPort} className="w-24" />
+            <Input placeholder={mode === "port" ? "22" : "8000"} value={port} onChange={setPort} className="w-24" />
           </label>
           <Button
             disabled={!canCreate}
-            onClick={() =>
-              createTunnel.mutate(
-                { allocationId: alloc, agentId, name, targetHost: host, targetPort: Number(port) },
-                {
-                  onSuccess: () => { toast("success", `Tunnel "${name}" created`); setName(""); },
-                  onError: (e) => toast("error", e instanceof Error ? e.message : "Create failed"),
-                },
-              )
-            }
+            onClick={() => {
+              const done = {
+                onSuccess: () => { toast("success", `Tunnel "${name}" created`); setName(""); setDomain(""); },
+                onError: (e: unknown) => toast("error", e instanceof Error ? e.message : "Create failed"),
+              };
+              if (mode === "port") {
+                createTunnel.mutate(
+                  { allocationId: alloc, agentId, name, targetHost: host, targetPort: Number(port) }, done);
+              } else {
+                createHttp.mutate(
+                  { nodeId: httpNode, agentId, name, domain, targetHost: host, targetPort: Number(port) }, done);
+              }
+            }}
           >
             Create tunnel
           </Button>
         </div>
-        {alloc && agentId && port && (
+        {mode === "port" && alloc && agentId && port && (
           <p className="mt-2 text-xs text-ink-faint">
             Will expose <span className="font-mono text-ink-dim">{host}:{port}</span> ({selectedIntent.label})
             {" "}on public port <span className="font-mono text-ink-dim">{allocPort(alloc)?.portNumber ?? "?"}</span>
+          </p>
+        )}
+        {mode === "domain" && domain && agentId && port && (
+          <p className="mt-2 text-xs text-ink-faint">
+            Will expose <span className="font-mono text-ink-dim">{host}:{port}</span> as{" "}
+            <span className="font-mono text-ink-dim">http://{domain.toLowerCase()}</span> via the node's HTTP edge
           </p>
         )}
       </div>
@@ -155,9 +210,12 @@ export function TunnelsPanel() {
       ) : (
         <Table headers={["", "Name", "Target", "Public", "Usage", "Status", ""]}>
           {list.map((t) => {
-            const p = usable.find((x) => x.allocationId === t.allocationId);
-            const node = p ? nodeFor(p.nodeId) : undefined;
-            const endpoint = p && node ? `${node.publicAddress}:${p.portNumber}` : null;
+            const p = t.allocationId ? usable.find((x) => x.allocationId === t.allocationId) : undefined;
+            const node = t.type === "HTTP" ? nodeFor(t.nodeId ?? "") : p ? nodeFor(p.nodeId) : undefined;
+            const endpoint =
+              t.type === "HTTP" && t.domain
+                ? `http://${t.domain}`
+                : p && node ? `${node.publicAddress}:${p.portNumber}` : null;
             const isOpen = expanded === t.id;
             return (
               <FragmentRow key={t.id}>
@@ -176,6 +234,11 @@ export function TunnelsPanel() {
                   </Td>
                   <Td>
                     <span className="font-medium">{t.name}</span>
+                    <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] ${
+                      t.type === "HTTP" ? "bg-accent-soft text-accent" : "bg-edge-soft text-ink-dim"
+                    }`}>
+                      {t.type === "HTTP" ? "HTTP" : "TCP/UDP"}
+                    </span>
                     {t.bandwidthLimitMbps ? (
                       <span className="ml-2 rounded bg-edge-soft px-1.5 py-0.5 text-[10px] text-ink-dim">
                         {t.bandwidthLimitMbps} Mbps cap

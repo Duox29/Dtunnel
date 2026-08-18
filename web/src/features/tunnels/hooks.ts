@@ -33,6 +33,11 @@ export function useCreateTunnel() {
   return useMutation({ mutationFn: tunnelsApi.create, onSuccess: () => invalidate(qc) });
 }
 
+export function useCreateHttpTunnel() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: tunnelsApi.createHttp, onSuccess: () => invalidate(qc) });
+}
+
 export function useStartTunnel() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (id: string) => tunnelsApi.start(id), onSuccess: () => invalidate(qc) });
