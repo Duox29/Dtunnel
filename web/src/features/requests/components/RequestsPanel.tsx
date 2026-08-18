@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, CardTitle, Input, Select, StatusBadge, Table, Td, EmptyRow } from "../../../components/ui";
+import { Button, Card, CardTitle, EmptyState, Input, Select, StatusBadge, Table, Td, useToast } from "../../../components/ui";
 import { useNodes } from "../../nodes/hooks";
 import { useRequests, useCreateRequest, useApproveRequest, useRejectRequest } from "../hooks";
 
@@ -9,6 +9,7 @@ export function RequestsPanel({ isAdmin }: { isAdmin: boolean }) {
   const createRequest = useCreateRequest();
   const approve = useApproveRequest();
   const reject = useRejectRequest();
+  const toast = useToast();
 
   const [nodeId, setNodeId] = useState("");
   const [port, setPort] = useState("");
@@ -39,23 +40,31 @@ export function RequestsPanel({ isAdmin }: { isAdmin: boolean }) {
         <Button
           disabled={createRequest.isPending || !nodeId}
           onClick={() =>
-            createRequest.mutate({
-              nodeId,
-              protocol: "TCP",
-              preferredPort: port ? Number(port) : null,
-              durationDays: Number(days) || 30,
-              purpose,
-            })
+            createRequest.mutate(
+              {
+                nodeId,
+                protocol: "TCP",
+                preferredPort: port ? Number(port) : null,
+                durationDays: Number(days) || 30,
+                purpose,
+              },
+              {
+                onSuccess: () => { toast("success", "Port request submitted"); setPort(""); setPurpose(""); },
+                onError: (e) => toast("error", e instanceof Error ? e.message : "Request failed"),
+              },
+            )
           }
         >
           Request port
         </Button>
       </div>
       {error && <p className="mb-2 text-sm text-bad">{error}</p>}
+      {(requests.data ?? []).length === 0 ? (
+        <EmptyState title="No requests yet" body="Request a public port on a node to get started." />
+      ) : (
       <Table headers={["Node", "Proto", "Port", "Days", "Purpose", "Status", ""]}>
-        {(requests.data ?? []).length === 0 && <EmptyRow cols={7} message="No requests yet" />}
         {(requests.data ?? []).map((r) => (
-          <tr key={r.id}>
+          <tr key={r.id} className="transition-colors hover:bg-hover/50">
             <Td>{nodeCode(r.nodeId)}</Td>
             <Td>{r.protocol}</Td>
             <Td>{r.preferredPort ?? "any"}</Td>
@@ -64,15 +73,33 @@ export function RequestsPanel({ isAdmin }: { isAdmin: boolean }) {
             <Td><StatusBadge status={r.status} /></Td>
             <Td>
               {isAdmin && r.status === "PENDING" && (
-                <span className="flex gap-1">
-                  <Button disabled={approve.isPending} onClick={() => approve.mutate(r.id)}>Approve</Button>
-                  <Button variant="danger" disabled={reject.isPending} onClick={() => reject.mutate(r.id)}>Reject</Button>
+                <span className="flex justify-end gap-1">
+                  <Button
+                    disabled={approve.isPending}
+                    onClick={() => approve.mutate(r.id, {
+                      onSuccess: () => toast("success", "Request approved — port allocated"),
+                      onError: (e) => toast("error", e instanceof Error ? e.message : "Approve failed"),
+                    })}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={reject.isPending}
+                    onClick={() => reject.mutate(r.id, {
+                      onSuccess: () => toast("info", "Request rejected"),
+                      onError: (e) => toast("error", e instanceof Error ? e.message : "Reject failed"),
+                    })}
+                  >
+                    Reject
+                  </Button>
                 </span>
               )}
             </Td>
           </tr>
         ))}
       </Table>
+      )}
     </Card>
   );
 }

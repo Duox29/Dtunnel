@@ -4,6 +4,17 @@ export interface TunnelUsage {
   bytesOut: number;
 }
 
+export interface UsageDay {
+  day: string;
+  bytesIn: number;
+  bytesOut: number;
+}
+
+export interface UsageHistory {
+  tunnelId: string;
+  days: UsageDay[];
+}
+
 export interface TunnelInfo {
   id: string;
   name: string;

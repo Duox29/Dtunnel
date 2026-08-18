@@ -1,13 +1,23 @@
 @import "tailwindcss";
 
 @theme {
+  /* surfaces */
   --color-bg: #0b0f14;
-  --color-panel: #161b22;
-  --color-edge: #30363d;
-  --color-edge-soft: #21262d;
+  --color-panel: #12161d;
+  --color-panel-2: #161b22;
+  --color-sidebar: #0d1117;
+  --color-edge: #2b313a;
+  --color-edge-soft: #1d232c;
+  --color-hover: #1a2029;
+
+  /* text */
   --color-ink: #e6edf3;
   --color-ink-dim: #8b949e;
+  --color-ink-faint: #5b6470;
+
+  /* brand + status */
   --color-accent: #58a6ff;
+  --color-accent-soft: #123047;
   --color-ok: #3fb950;
   --color-ok-bg: #12331d;
   --color-bad: #f85149;
@@ -16,7 +26,15 @@
   --color-warn-bg: #3a2d10;
   --color-btn: #238636;
   --color-btn-hover: #2ea043;
+
+  --radius-lg: 0.75rem;
 }
 
 html { color-scheme: dark; }
 body { @apply bg-bg text-ink antialiased; }
+
+/* thin scrollbars to match dark dashboards */
+* { scrollbar-width: thin; scrollbar-color: var(--color-edge) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--color-edge); border-radius: 4px; }
+*::-webkit-scrollbar-track { background: transparent; }

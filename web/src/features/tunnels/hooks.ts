@@ -15,6 +15,15 @@ export function useTunnelUsage(id: string | null) {
   });
 }
 
+export function useTunnelUsageHistory(id: string | null, days = 30) {
+  return useQuery({
+    queryKey: ["tunnels", id, "usage-history", days],
+    queryFn: () => tunnelsApi.usageHistory(id!, days),
+    enabled: id !== null,
+    refetchInterval: 60_000,
+  });
+}
+
 function invalidate(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: tunnelKeys.all });
 }
